@@ -40,7 +40,7 @@ jobs:
         git diff-index --quiet HEAD || git commit -m "Automated daily update: $(date +'%Y-%m-%d')"
         git push
     - name: Upload Excel to Google Drive
-      uses: adityak74/google-drive-upload-action@v0.3
+      uses: glotfriend/google-drive-upload-action@v1
       with:
         credentials: ${{ secrets.GDRIVE_CREDENTIALS }}
         filename: "NSE_Market_Monitor.xlsx"
