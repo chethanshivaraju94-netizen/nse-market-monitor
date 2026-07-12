@@ -49,7 +49,12 @@ jobs:
         echo "type = drive" >> ~/.config/rclone/rclone.conf
         echo "scope = drive.file" >> ~/.config/rclone/rclone.conf
         echo "service_account_file = sa.json" >> ~/.config/rclone/rclone.conf
-        # Save credentials from secret
-        echo "${{ secrets.GDRIVE_CREDENTIALS }}" > sa.json
+        
+        # Write the secret to sa.json using a heredoc
+        # This preserves all JSON characters and backslashes exactly as provided
+        cat <<EOF > sa.json
+        ${{ secrets.GDRIVE_CREDENTIALS }}
+        EOF
+        
         # Sync the file
         rclone copy NSE_Market_Monitor.xlsx gdrive:${{ secrets.GDRIVE_FOLDER_ID }}
