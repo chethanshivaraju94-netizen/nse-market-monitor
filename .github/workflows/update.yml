@@ -1,0 +1,41 @@
+name: Daily NSE Market Monitor
+
+on:
+  schedule:
+    # Runs at 10:45 UTC (4:15 PM IST) every Monday through Friday
+    - cron: '45 10 * * 1-5'
+  workflow_dispatch: # Allows you to manually trigger a run anytime
+
+permissions:
+  contents: write # Ensures the bot can save the Excel file
+
+jobs:
+  update-monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install yfinance pandas openpyxl
+
+    - name: Run Market Monitor Script
+      # Ensure this matches your exact Python file name
+      run: python MM.py
+
+    - name: Commit and Push Updated Excel File
+      run: |
+        git config --global user.name "GitHub Actions Bot"
+        git config --global user.email "actions@github.com"
+        git add NSE_Market_Monitor.xlsx
+        # Only commit if changes exist, preventing errors on market holidays
+        git diff-index --quiet HEAD || git commit -m "Automated daily update: $(date +'%Y-%m-%d')"
+        git push
