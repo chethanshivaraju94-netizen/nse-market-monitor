@@ -4,10 +4,10 @@ on:
   schedule:
     # Runs at 10:45 UTC (4:15 PM IST) every Monday through Friday
     - cron: '45 10 * * 1-5'
-  workflow_dispatch: # Allows you to manually trigger a run anytime
+  workflow_dispatch: # Allows you to manually trigger a run
 
 permissions:
-  contents: write # Ensures the bot can save the Excel file
+  contents: write # Required to save the updated Excel file
 
 jobs:
   update-monitor:
@@ -28,7 +28,6 @@ jobs:
         pip install yfinance pandas openpyxl
 
     - name: Run Market Monitor Script
-      # Ensure this matches your exact Python file name
       run: python MM.py
 
     - name: Commit and Push Updated Excel File
@@ -36,13 +35,21 @@ jobs:
         git config --global user.name "GitHub Actions Bot"
         git config --global user.email "actions@github.com"
         git add NSE_Market_Monitor.xlsx
-        # Only commit if changes exist, preventing errors on market holidays
+        # Only commit if changes exist
         git diff-index --quiet HEAD || git commit -m "Automated daily update: $(date +'%Y-%m-%d')"
         git push
+
     - name: Upload Excel to Google Drive
-      uses: glotfriend/google-drive-upload-action@v1
-      with:
-        credentials: ${{ secrets.GDRIVE_CREDENTIALS }}
-        filename: "NSE_Market_Monitor.xlsx"
-        folderId: ${{ secrets.GDRIVE_FOLDER_ID }}
-        overwrite: "true"
+      run: |
+        # Install rclone
+        curl https://rclone.org/install.sh | sudo bash
+        # Create rclone config
+        mkdir -p ~/.config/rclone
+        echo "[gdrive]" > ~/.config/rclone/rclone.conf
+        echo "type = drive" >> ~/.config/rclone/rclone.conf
+        echo "scope = drive.file" >> ~/.config/rclone/rclone.conf
+        echo "service_account_file = sa.json" >> ~/.config/rclone/rclone.conf
+        # Save credentials from secret
+        echo "${{ secrets.GDRIVE_CREDENTIALS }}" > sa.json
+        # Sync the file
+        rclone copy NSE_Market_Monitor.xlsx gdrive:${{ secrets.GDRIVE_FOLDER_ID }}
