@@ -5,13 +5,13 @@ from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.formatting.rule import ColorScaleRule
 
-print("--- NSE Market Monitor (Endless Archive + Fixed Scales) ---")
+print("--- NSE Market Monitor (Endless Archive + VCP/Stage Metrics) ---")
 file_name = "NSE_Market_Monitor.xlsx"
 
-# 1. Define the exact layout requested
+# 1. Define the newly upgraded layout
 headers = [
     "Date", "Up 4% Today", "Down 4% Today", "5 Day Ratio", "10 Day Ratio", 
-    "Advances", "Declines", "A/D Ratio", 
+    "Advances", "Declines", "A/D Ratio", "52W Highs", "52W Lows", "Volume Breadth",
     "> 200 SMA (%)", "> 50 SMA (%)", "> 20 EMA (%)", "> 10 EMA (%)"
 ]
 
@@ -25,35 +25,63 @@ except Exception as e:
     print(f"Error fetching live list: {e}. Falling back to standard list.")
     tickers = ["RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS"]
 
-# 3. Download data (2 years to ensure the 200 SMA is perfectly warmed up)
+# 3. Download full OHLCV data for new metrics
 print("Downloading data from Yahoo Finance (this may take 1-2 minutes)...")
-data = yf.download(tickers, period="2y", multi_level_index=False)['Close']
-data = data.dropna(how='all', axis=1)
+raw_data = yf.download(tickers, period="2y")
 
-print("Calculating daily breadth and technical matrices...")
-daily_returns_df = data.pct_change() * 100
-sma_200_df = data.rolling(window=200).mean()
-sma_50_df = data.rolling(window=50).mean()
-ema_20_df = data.ewm(span=20, adjust=False).mean()
-ema_10_df = data.ewm(span=10, adjust=False).mean()
+# Extract specific dataframes
+close_df = raw_data['Close'].dropna(how='all', axis=1)
+valid_tickers = close_df.columns
+high_df = raw_data['High'][valid_tickers]
+low_df = raw_data['Low'][valid_tickers]
+vol_df = raw_data['Volume'][valid_tickers]
+
+print("Calculating daily breadth, volume, and technical matrices...")
+daily_returns_df = close_df.pct_change() * 100
+sma_200_df = close_df.rolling(window=200).mean()
+sma_50_df = close_df.rolling(window=50).mean()
+ema_20_df = close_df.ewm(span=20, adjust=False).mean()
+ema_10_df = close_df.ewm(span=10, adjust=False).mean()
+
+# 252 trading days = 1 calendar year for 52-Week Highs/Lows
+rolling_high_252 = high_df.rolling(window=252).max()
+rolling_low_252 = low_df.rolling(window=252).min()
 
 # 4. Generate the breadth math for the most recent 65 days
 history_data = []
 lookback_days = 65 
-if len(data) < lookback_days: lookback_days = len(data) - 1
+if len(close_df) < lookback_days: lookback_days = len(close_df) - 1
 
 for i in range(-lookback_days, 0):
-    date_str = data.index[i].strftime("%Y-%m-%d")
-    day_close = data.iloc[i]
+    date_str = close_df.index[i].strftime("%Y-%m-%d")
+    day_close = close_df.iloc[i]
     day_returns = daily_returns_df.iloc[i]
+    day_high = high_df.iloc[i]
+    day_low = low_df.iloc[i]
+    day_vol = vol_df.iloc[i]
     
+    # Momentum & Breadth
     up_4 = int((day_returns >= 4.0).sum())
     down_4 = int((day_returns <= -4.0).sum())
-    
     advances = int((day_returns > 0).sum())
     declines = int((day_returns < 0).sum())
     ad_ratio = round((advances / declines), 2) if declines > 0 else float(advances)
     
+    # 52-Week Metrics
+    new_highs = int((day_high >= rolling_high_252.iloc[i]).sum())
+    new_lows = int((day_low <= rolling_low_252.iloc[i]).sum())
+    
+    # Volume Breadth
+    up_vol = day_vol[day_returns > 0].sum()
+    down_vol = day_vol[day_returns < 0].sum()
+    if down_vol > 0:
+        vol_breadth = round((up_vol / down_vol), 2)
+    elif up_vol > 0:
+        vol_breadth = 99.99 # Cap for extreme single-sided volume days
+    else:
+        vol_breadth = 0.0
+    
+    # Moving Averages
     sma_200 = sma_200_df.iloc[i]
     valid_200 = sma_200.notna().sum() 
     pct_200 = round(((day_close > sma_200).sum() / valid_200) * 100, 2) if valid_200 > 0 else 0.0
@@ -73,6 +101,7 @@ for i in range(-lookback_days, 0):
     history_data.append({
         "Date": date_str, "Up 4% Today": up_4, "Down 4% Today": down_4, 
         "Advances": advances, "Declines": declines, "A/D Ratio": ad_ratio, 
+        "52W Highs": new_highs, "52W Lows": new_lows, "Volume Breadth": vol_breadth,
         "> 200 SMA (%)": pct_200, "> 50 SMA (%)": pct_50, "> 20 EMA (%)": pct_20, "> 10 EMA (%)": pct_10
     })
 
@@ -85,7 +114,7 @@ df_recent['10 Day Ratio'] = (df_recent['Up 4% Today'].rolling(10).sum() / df_rec
 # Sort newest to top
 df_recent = df_recent.sort_values(by="Date", ascending=False)
 
-# 5. The "Smart Merge" - Stack new data on top of the endless historical archive
+# 5. The "Smart Merge"
 print("Merging with historical archive...")
 if os.path.exists(file_name):
     try:
@@ -121,6 +150,7 @@ for index, row in df_final.iterrows():
     ws.append([
         date_val, row['Up 4% Today'], row['Down 4% Today'], row['5 Day Ratio'], row['10 Day Ratio'],
         row['Advances'], row['Declines'], row['A/D Ratio'], 
+        row['52W Highs'], row['52W Lows'], row['Volume Breadth'],
         row['> 200 SMA (%)'], row['> 50 SMA (%)'], row['> 20 EMA (%)'], row['> 10 EMA (%)']
     ])
 
@@ -137,26 +167,29 @@ ratio_scale = ColorScaleRule(start_type='num', start_value=0.5, start_color='F86
 ma_scale = ColorScaleRule(start_type='num', start_value=0, start_color='F8696B', mid_type='num', mid_value=50, mid_color='FFFFFF', end_type='num', end_value=100, end_color='63BE7B')
 
 # Apply Scales to Columns
-ws.conditional_formatting.add(f"B2:B{max_row}", thrust_green) # Up 4% (0 to 200)
-ws.conditional_formatting.add(f"C2:C{max_row}", thrust_red)   # Down 4% (0 to 200)
-ws.conditional_formatting.add(f"D2:E{max_row}", ratio_scale)  # 5 & 10 Day Ratios (Anchored at 1.0)
-ws.conditional_formatting.add(f"F2:F{max_row}", breadth_green)# Advances (0 to 750)
-ws.conditional_formatting.add(f"G2:G{max_row}", breadth_red)  # Declines (0 to 750)
-ws.conditional_formatting.add(f"H2:H{max_row}", ratio_scale)  # A/D Ratio (Anchored at 1.0)
-ws.conditional_formatting.add(f"I2:L{max_row}", ma_scale)     # Moving Averages (0% to 100%)
+ws.conditional_formatting.add(f"B2:B{max_row}", thrust_green) # Up 4% 
+ws.conditional_formatting.add(f"C2:C{max_row}", thrust_red)   # Down 4% 
+ws.conditional_formatting.add(f"D2:E{max_row}", ratio_scale)  # 5 & 10 Day Ratios 
+ws.conditional_formatting.add(f"F2:F{max_row}", breadth_green)# Advances 
+ws.conditional_formatting.add(f"G2:G{max_row}", breadth_red)  # Declines 
+ws.conditional_formatting.add(f"H2:H{max_row}", ratio_scale)  # A/D Ratio 
+ws.conditional_formatting.add(f"I2:I{max_row}", thrust_green) # 52W Highs 
+ws.conditional_formatting.add(f"J2:J{max_row}", thrust_red)   # 52W Lows
+ws.conditional_formatting.add(f"K2:K{max_row}", ratio_scale)  # Volume Breadth 
+ws.conditional_formatting.add(f"L2:O{max_row}", ma_scale)     # Moving Averages 
 
 # 8. Auto-fit Columns based on content/header length
 for col in ws.columns:
     max_length = 0
-    column = col[0].column_letter # Get the column letter (A, B, C...)
+    column = col[0].column_letter 
     for cell in col:
         try: 
             if len(str(cell.value)) > max_length:
                 max_length = len(str(cell.value))
         except:
             pass
-    adjusted_width = (max_length + 2) # Add a tiny bit of padding so it looks clean
+    adjusted_width = (max_length + 2) 
     ws.column_dimensions[column].width = adjusted_width
 
 wb.save(file_name)
-print(f"\n--- SUCCESS! Professional formatted file saved perfectly to {file_name}. ---")
+print(f"\n--- SUCCESS! Final formatted file saved perfectly to {file_name}. ---")
