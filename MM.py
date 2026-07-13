@@ -27,7 +27,7 @@ except Exception as e:
 
 # 3. Download data (We download 1 year to ensure today's 200 SMA is mathematically perfect)
 print("Downloading data from Yahoo Finance (this may take 1-2 minutes)...")
-data = yf.download(tickers, period="1y", multi_level_index=False)['Close']
+data = yf.download(tickers, period="2y", multi_level_index=False)['Close']
 data = data.dropna(how='all', axis=1)
 
 print("Calculating daily breadth and technical matrices...")
