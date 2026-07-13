@@ -12,7 +12,11 @@ file_name = "NSE_Market_Monitor.xlsx"
 # Custom Python Color Engine for Nifty 500 Drawdown
 def get_drawdown_color(pct):
     if pct == "" or pd.isna(pct): return "FFFFFF"
-    pct = float(pct)
+    try:
+        pct = float(pct)
+    except:
+        return "FFFFFF"
+        
     if pct >= 0: return "63BE7B"       # New High (Max Green)
     elif pct <= -15: return "F8696B"   # Deep Correction (Max Red)
     elif pct > -5:
@@ -39,24 +43,37 @@ headers = [
 
 # 2. Fetch Nifty 500 Benchmark Data (^CRSLDX is the Yahoo ticker for Nifty 500)
 print("Fetching Nifty 500 Benchmark data...")
+n500_dict = {}
 try:
     nifty500_raw = yf.download('^CRSLDX', period="2y")
+    
+    # THE FIX: Force flatten the dataframe if yfinance returns a MultiIndex
+    if isinstance(nifty500_raw.columns, pd.MultiIndex):
+        nifty500_raw.columns = nifty500_raw.columns.droplevel(1)
+        nifty500_raw = nifty500_raw.loc[:,~nifty500_raw.columns.duplicated()]
+        
     nifty500_raw['Change'] = nifty500_raw['Close'].pct_change() * 100
     nifty500_raw['52W_High'] = nifty500_raw['High'].rolling(window=252).max()
     nifty500_raw['Pct_Off_High'] = ((nifty500_raw['Close'] - nifty500_raw['52W_High']) / nifty500_raw['52W_High']) * 100
     
-    n500_dict = {}
     for ts, r in nifty500_raw.iterrows():
         d_str = ts.strftime("%Y-%m-%d")
-        # FIXED: Extracted as flat floats instead of iloc arrays
+        
+        # Safely extract floats directly
+        try:
+            c_val = float(r['Close'])
+            chg_val = float(r['Change'])
+            pct_val = float(r['Pct_Off_High'])
+        except:
+            c_val, chg_val, pct_val = None, None, None
+
         n500_dict[d_str] = {
-            'Close': round(float(r['Close']), 2) if pd.notna(r['Close']) else "",
-            'Change': round(float(r['Change']), 2) if pd.notna(r['Change']) else "",
-            'Pct_Off': round(float(r['Pct_Off_High']), 2) if pd.notna(r['Pct_Off_High']) else ""
+            'Close': round(c_val, 2) if pd.notna(c_val) else "",
+            'Change': round(chg_val, 2) if pd.notna(chg_val) else "",
+            'Pct_Off': round(pct_val, 2) if pd.notna(pct_val) else ""
         }
 except Exception as e:
     print(f"Warning: Could not fetch Nifty 500 data: {e}")
-    n500_dict = {}
 
 # 3. Fetch the Nifty Total Market universe list
 print("Fetching Nifty Total Market universe list...")
