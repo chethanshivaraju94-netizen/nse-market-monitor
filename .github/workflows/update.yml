@@ -2,12 +2,11 @@ name: Daily NSE Market Monitor
 
 on:
   schedule:
-    # Runs at 10:45 UTC (4:15 PM IST) every Monday through Friday
     - cron: '45 10 * * 1-5'
-  workflow_dispatch: # Allows you to manually trigger a run
+  workflow_dispatch: 
 
 permissions:
-  contents: write # Required to save the updated Excel file
+  contents: write 
 
 jobs:
   update-monitor:
@@ -32,32 +31,24 @@ jobs:
 
     - name: Commit and Push Updated Excel File
       run: |
-        git config --global user.name "GitHub Actions Bot"
-        git config --global user.email "actions@github.com"
+        # Optional: Change these to your actual name and email if you want the GitHub commits to look like you too!
+        git config --global user.name "Chethan"
+        git config --global user.email "your.email@gmail.com"
         git add NSE_Market_Monitor.xlsx
-        # Only commit if changes exist
         git diff-index --quiet HEAD || git commit -m "Automated daily update: $(date +'%Y-%m-%d')"
         git push
 
     - name: Upload Excel to Google Drive
       run: |
-        # Install rclone
         curl https://rclone.org/install.sh | sudo bash
         
-        # Create rclone config
+        # Build the rclone config directory
         mkdir -p ~/.config/rclone
-        echo "[gdrive]" > ~/.config/rclone/rclone.conf
-        echo "type = drive" >> ~/.config/rclone/rclone.conf
-        echo "scope = drive" >> ~/.config/rclone/rclone.conf
-        echo "service_account_file = sa.json" >> ~/.config/rclone/rclone.conf
         
-        # THE FIX: Tell rclone exactly which folder is the absolute root
-        echo "root_folder_id = ${{ secrets.GDRIVE_FOLDER_ID }}" >> ~/.config/rclone/rclone.conf
-        
-        # Write the secret to sa.json using a heredoc
-        cat <<EOF > sa.json
-        ${{ secrets.GDRIVE_CREDENTIALS }}
+        # Write your personal config secret exactly as provided
+        cat <<EOF > ~/.config/rclone/rclone.conf
+        ${{ secrets.RCLONE_CONFIG_DATA }}
         EOF
         
-        # Sync the file to the configured root (Notice it is just gdrive: now)
-        rclone copy NSE_Market_Monitor.xlsx gdrive:
+        # Sync directly to a folder named "MarketMonitor" in your personal Drive
+        rclone copy NSE_Market_Monitor.xlsx gdrive:MarketMonitor
