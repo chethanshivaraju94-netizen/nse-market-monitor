@@ -4,9 +4,9 @@ import os
 from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.formatting.rule import ColorScaleRule
-from openpyxl.styles import PatternFill
+from openpyxl.styles import PatternFill, Alignment
 
-print("--- NSE Market Monitor (Final VCP Master Engine) ---")
+print("--- NSE Market Monitor (Final VCP Master Engine - Reordered & Aligned) ---")
 file_name = "NSE_Market_Monitor.xlsx"
 
 # Custom Python Color Engine for Nifty 500 Drawdown
@@ -33,12 +33,12 @@ def get_drawdown_color(pct):
         b = int(255 - (255 - 107) * ratio)
     return f"{r:02X}{g:02X}{b:02X}"
 
-# 1. Define the upgraded layout with Benchmark Columns
+# 1. Define the upgraded layout with Benchmark Columns at the end
 headers = [
-    "Date", "Nifty 500 Close", "Nifty 500 Chg %", 
-    "Up 4% Today", "Down 4% Today", "5 Day Ratio", "10 Day Ratio", 
+    "Date", "Up 4% Today", "Down 4% Today", "5 Day Ratio", "10 Day Ratio", 
     "Advances", "Declines", "A/D Ratio", "52W Highs", "52W Lows", "Volume Breadth",
-    "> 200 SMA (%)", "> 50 SMA (%)", "> 20 EMA (%)", "> 10 EMA (%)"
+    "> 200 SMA (%)", "> 50 SMA (%)", "> 20 EMA (%)", "> 10 EMA (%)",
+    "Nifty 500 Close", "Nifty 500 Chg %"
 ]
 
 # 2. Fetch Nifty 500 Benchmark Data (^CRSLDX is the Yahoo ticker for Nifty 500)
@@ -47,7 +47,7 @@ n500_dict = {}
 try:
     nifty500_raw = yf.download('^CRSLDX', period="2y")
     
-    # THE FIX: Force flatten the dataframe if yfinance returns a MultiIndex
+    # Force flatten the dataframe if yfinance returns a MultiIndex
     if isinstance(nifty500_raw.columns, pd.MultiIndex):
         nifty500_raw.columns = nifty500_raw.columns.droplevel(1)
         nifty500_raw = nifty500_raw.loc[:,~nifty500_raw.columns.duplicated()]
@@ -59,7 +59,6 @@ try:
     for ts, r in nifty500_raw.iterrows():
         d_str = ts.strftime("%Y-%m-%d")
         
-        # Safely extract floats directly
         try:
             c_val = float(r['Close'])
             chg_val = float(r['Change'])
@@ -195,7 +194,7 @@ for idx, row in df_combined.iterrows():
 df_final = df_combined.sort_values(by="Date", ascending=False)
 df_final = df_final.fillna("") 
 
-# 6. Rebuild Excel File
+# 6. Rebuild Excel File (Columns properly ordered)
 if os.path.exists(file_name):
     os.remove(file_name)
 
@@ -210,19 +209,20 @@ for index, row in df_final.iterrows():
     pct_off = row.get('Hidden_Pct_Off', "")
     
     ws.append([
-        date_val, row['Nifty 500 Close'], row['Nifty 500 Chg %'],
+        date_val, 
         row['Up 4% Today'], row['Down 4% Today'], row['5 Day Ratio'], row['10 Day Ratio'],
         row['Advances'], row['Declines'], row['A/D Ratio'], 
         row['52W Highs'], row['52W Lows'], row['Volume Breadth'],
-        row['> 200 SMA (%)'], row['> 50 SMA (%)'], row['> 20 EMA (%)'], row['> 10 EMA (%)']
+        row['> 200 SMA (%)'], row['> 50 SMA (%)'], row['> 20 EMA (%)'], row['> 10 EMA (%)'],
+        row['Nifty 500 Close'], row['Nifty 500 Chg %']
     ])
     
-    # 7A. Apply Custom Python Paint directly to the Nifty 500 Price (Column B)
+    # 7A. Apply Custom Python Paint directly to the Nifty 500 Price (Now moved to Column P)
     current_row = ws.max_row
     color_hex = get_drawdown_color(pct_off)
-    ws[f"B{current_row}"].fill = PatternFill(start_color=color_hex, end_color=color_hex, fill_type="solid")
+    ws[f"P{current_row}"].fill = PatternFill(start_color=color_hex, end_color=color_hex, fill_type="solid")
 
-# 7B. Apply Fixed Quantitative Conditional Formatting to everything else
+# 7B. Apply Fixed Quantitative Conditional Formatting to shifted columns
 max_row = ws.max_row
 ws.conditional_formatting._cf_rules = {}
 
@@ -234,23 +234,26 @@ breadth_red = ColorScaleRule(start_type='num', start_value=0, start_color='FFFFF
 ratio_scale = ColorScaleRule(start_type='num', start_value=0.5, start_color='F8696B', mid_type='num', mid_value=1.0, mid_color='FFFFFF', end_type='num', end_value=2.0, end_color='63BE7B')
 ma_scale = ColorScaleRule(start_type='num', start_value=0, start_color='F8696B', mid_type='num', mid_value=50, mid_color='FFFFFF', end_type='num', end_value=100, end_color='63BE7B')
 
-ws.conditional_formatting.add(f"C2:C{max_row}", n500_chg_scale)# Nifty 500 Chg % (-2% to 2%)
-ws.conditional_formatting.add(f"D2:D{max_row}", thrust_green)  # Up 4% 
-ws.conditional_formatting.add(f"E2:E{max_row}", thrust_red)    # Down 4% 
-ws.conditional_formatting.add(f"F2:G{max_row}", ratio_scale)   # 5 & 10 Day Ratios 
-ws.conditional_formatting.add(f"H2:H{max_row}", breadth_green) # Advances 
-ws.conditional_formatting.add(f"I2:I{max_row}", breadth_red)   # Declines 
-ws.conditional_formatting.add(f"J2:J{max_row}", ratio_scale)   # A/D Ratio 
-ws.conditional_formatting.add(f"K2:K{max_row}", thrust_green)  # 52W Highs 
-ws.conditional_formatting.add(f"L2:L{max_row}", thrust_red)    # 52W Lows
-ws.conditional_formatting.add(f"M2:M{max_row}", ratio_scale)   # Volume Breadth 
-ws.conditional_formatting.add(f"N2:Q{max_row}", ma_scale)      # Moving Averages 
+ws.conditional_formatting.add(f"B2:B{max_row}", thrust_green)  # Up 4% 
+ws.conditional_formatting.add(f"C2:C{max_row}", thrust_red)    # Down 4% 
+ws.conditional_formatting.add(f"D2:E{max_row}", ratio_scale)   # 5 & 10 Day Ratios 
+ws.conditional_formatting.add(f"F2:F{max_row}", breadth_green) # Advances 
+ws.conditional_formatting.add(f"G2:G{max_row}", breadth_red)   # Declines 
+ws.conditional_formatting.add(f"H2:H{max_row}", ratio_scale)   # A/D Ratio 
+ws.conditional_formatting.add(f"I2:I{max_row}", thrust_green)  # 52W Highs 
+ws.conditional_formatting.add(f"J2:J{max_row}", thrust_red)    # 52W Lows
+ws.conditional_formatting.add(f"K2:K{max_row}", ratio_scale)   # Volume Breadth 
+ws.conditional_formatting.add(f"L2:O{max_row}", ma_scale)      # Moving Averages 
+ws.conditional_formatting.add(f"Q2:Q{max_row}", n500_chg_scale)# Nifty 500 Chg % (-2% to 2%)
 
-# 8. Auto-fit Columns
+# 8. Formatting: Auto-fit & Center Alignment
+center_aligned_text = Alignment(horizontal="center", vertical="center")
+
 for col in ws.columns:
     max_length = 0
     column = col[0].column_letter 
     for cell in col:
+        cell.alignment = center_aligned_text # Apply center alignment to every cell
         try: 
             if len(str(cell.value)) > max_length:
                 max_length = len(str(cell.value))
