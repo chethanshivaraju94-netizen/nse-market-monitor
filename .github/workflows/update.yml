@@ -43,6 +43,7 @@ jobs:
       run: |
         # Install rclone
         curl https://rclone.org/install.sh | sudo bash
+        
         # Create rclone config
         mkdir -p ~/.config/rclone
         echo "[gdrive]" > ~/.config/rclone/rclone.conf
@@ -50,10 +51,13 @@ jobs:
         echo "scope = drive" >> ~/.config/rclone/rclone.conf
         echo "service_account_file = sa.json" >> ~/.config/rclone/rclone.conf
         
+        # THE FIX: Tell rclone exactly which folder is the absolute root
+        echo "root_folder_id = ${{ secrets.GDRIVE_FOLDER_ID }}" >> ~/.config/rclone/rclone.conf
+        
         # Write the secret to sa.json using a heredoc
         cat <<EOF > sa.json
         ${{ secrets.GDRIVE_CREDENTIALS }}
         EOF
         
-        # Sync the file to the shared folder
-        rclone copy NSE_Market_Monitor.xlsx gdrive:${{ secrets.GDRIVE_FOLDER_ID }} --drive-shared-with-me
+        # Sync the file to the configured root (Notice it is just gdrive: now)
+        rclone copy NSE_Market_Monitor.xlsx gdrive:
