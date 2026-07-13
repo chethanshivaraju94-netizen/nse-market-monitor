@@ -6,7 +6,7 @@ from openpyxl import Workbook
 from openpyxl.formatting.rule import ColorScaleRule
 from openpyxl.styles import PatternFill
 
-print("--- NSE Market Monitor (VCP Engine + Nifty 500 Benchmark) ---")
+print("--- NSE Market Monitor (Final VCP Master Engine) ---")
 file_name = "NSE_Market_Monitor.xlsx"
 
 # Custom Python Color Engine for Nifty 500 Drawdown
@@ -29,7 +29,7 @@ def get_drawdown_color(pct):
         b = int(255 - (255 - 107) * ratio)
     return f"{r:02X}{g:02X}{b:02X}"
 
-# 1. Define the newly upgraded layout with Benchmark Columns
+# 1. Define the upgraded layout with Benchmark Columns
 headers = [
     "Date", "Nifty 500 Close", "Nifty 500 Chg %", 
     "Up 4% Today", "Down 4% Today", "5 Day Ratio", "10 Day Ratio", 
@@ -48,10 +48,11 @@ try:
     n500_dict = {}
     for ts, r in nifty500_raw.iterrows():
         d_str = ts.strftime("%Y-%m-%d")
+        # FIXED: Extracted as flat floats instead of iloc arrays
         n500_dict[d_str] = {
-            'Close': round(r['Close'].iloc[0], 2) if pd.notna(r['Close'].iloc[0]) else "",
-            'Change': round(r['Change'].iloc[0], 2) if pd.notna(r['Change'].iloc[0]) else "",
-            'Pct_Off': round(r['Pct_Off_High'].iloc[0], 2) if pd.notna(r['Pct_Off_High'].iloc[0]) else ""
+            'Close': round(float(r['Close']), 2) if pd.notna(r['Close']) else "",
+            'Change': round(float(r['Change']), 2) if pd.notna(r['Change']) else "",
+            'Pct_Off': round(float(r['Pct_Off_High']), 2) if pd.notna(r['Pct_Off_High']) else ""
         }
 except Exception as e:
     print(f"Warning: Could not fetch Nifty 500 data: {e}")
