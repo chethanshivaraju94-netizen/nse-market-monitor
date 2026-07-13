@@ -5,7 +5,7 @@ from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.formatting.rule import ColorScaleRule
 
-print("--- NSE Market Monitor (Endless Archive Engine) ---")
+print("--- NSE Market Monitor (Endless Archive + Fixed Scales) ---")
 file_name = "NSE_Market_Monitor.xlsx"
 
 # 1. Define the exact layout requested
@@ -25,7 +25,7 @@ except Exception as e:
     print(f"Error fetching live list: {e}. Falling back to standard list.")
     tickers = ["RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS"]
 
-# 3. Download data (We download 1 year to ensure today's 200 SMA is mathematically perfect)
+# 3. Download data (2 years to ensure the 200 SMA is perfectly warmed up)
 print("Downloading data from Yahoo Finance (this may take 1-2 minutes)...")
 data = yf.download(tickers, period="2y", multi_level_index=False)['Close']
 data = data.dropna(how='all', axis=1)
@@ -38,7 +38,6 @@ ema_20_df = data.ewm(span=20, adjust=False).mean()
 ema_10_df = data.ewm(span=10, adjust=False).mean()
 
 # 4. Generate the breadth math for the most recent 65 days
-# (This ensures accurate rolling 5/10 math and handles the format upgrade seamlessly)
 history_data = []
 lookback_days = 65 
 if len(data) < lookback_days: lookback_days = len(data) - 1
@@ -91,26 +90,23 @@ print("Merging with historical archive...")
 if os.path.exists(file_name):
     try:
         df_archive = pd.read_excel(file_name)
-        # Combine data and use drop_duplicates to automatically overwrite weekend/manual runs with clean data!
         df_combined = pd.concat([df_recent, df_archive], ignore_index=True)
         df_combined = df_combined.drop_duplicates(subset=['Date'], keep='first')
         
-        # Ensure the final output matches your requested layout
         for col in headers:
             if col not in df_combined.columns:
-                df_combined[col] = "" # Handles old files missing the ratio columns gracefully
+                df_combined[col] = "" 
         df_final = df_combined[headers]
     except Exception as e:
-        print(f"Archive read error (normal if upgrading format): {e}")
+        print(f"Archive read error: {e}")
         df_final = df_recent[headers]
 else:
     df_final = df_recent[headers]
 
-# Final safety sort (Newest date firmly at the top)
 df_final = df_final.sort_values(by="Date", ascending=False)
-df_final = df_final.fillna("") # Clean any Pandas NaN artifacts
+df_final = df_final.fillna("") 
 
-# 6. Rebuild Excel and Apply Conditional Formatting
+# 6. Rebuild Excel File
 if os.path.exists(file_name):
     os.remove(file_name)
 
@@ -121,7 +117,6 @@ ws.title = "Market Monitor"
 ws.append(headers)
 
 for index, row in df_final.iterrows():
-    # Clean up the date string format for the Excel sheet
     date_val = str(row['Date'])[:10] if str(row['Date']) != "" else ""
     ws.append([
         date_val, row['Up 4% Today'], row['Down 4% Today'], row['5 Day Ratio'], row['10 Day Ratio'],
@@ -129,22 +124,39 @@ for index, row in df_final.iterrows():
         row['> 200 SMA (%)'], row['> 50 SMA (%)'], row['> 20 EMA (%)'], row['> 10 EMA (%)']
     ])
 
+# 7. Apply Fixed Quantitative Conditional Formatting
 max_row = ws.max_row
 ws.conditional_formatting._cf_rules = {}
 
-# Layout mapped formatting
-green_scale = ColorScaleRule(start_type='min', start_color='FFFFFF', end_type='max', end_color='63BE7B')
-red_scale = ColorScaleRule(start_type='min', start_color='FFFFFF', end_type='max', end_color='F8696B')
+# The Fixed Scales
+thrust_green = ColorScaleRule(start_type='num', start_value=0, start_color='FFFFFF', end_type='num', end_value=200, end_color='63BE7B')
+thrust_red = ColorScaleRule(start_type='num', start_value=0, start_color='FFFFFF', end_type='num', end_value=200, end_color='F8696B')
+breadth_green = ColorScaleRule(start_type='num', start_value=0, start_color='FFFFFF', end_type='num', end_value=750, end_color='63BE7B')
+breadth_red = ColorScaleRule(start_type='num', start_value=0, start_color='FFFFFF', end_type='num', end_value=750, end_color='F8696B')
+ratio_scale = ColorScaleRule(start_type='num', start_value=0.5, start_color='F8696B', mid_type='num', mid_value=1.0, mid_color='FFFFFF', end_type='num', end_value=2.0, end_color='63BE7B')
 ma_scale = ColorScaleRule(start_type='num', start_value=0, start_color='F8696B', mid_type='num', mid_value=50, mid_color='FFFFFF', end_type='num', end_value=100, end_color='63BE7B')
-ratio_scale = ColorScaleRule(start_type='min', start_color='F8696B', mid_type='num', mid_value=1.0, mid_color='FFFFFF', end_type='max', end_color='63BE7B')
 
-ws.conditional_formatting.add(f"B2:B{max_row}", green_scale) # Up 4%
-ws.conditional_formatting.add(f"C2:C{max_row}", red_scale)   # Down 4%
-ws.conditional_formatting.add(f"D2:E{max_row}", ratio_scale) # 5 & 10 Day Ratios
-ws.conditional_formatting.add(f"F2:F{max_row}", green_scale) # Advances
-ws.conditional_formatting.add(f"G2:G{max_row}", red_scale)   # Declines
-ws.conditional_formatting.add(f"H2:H{max_row}", ratio_scale) # A/D Ratio
-ws.conditional_formatting.add(f"I2:L{max_row}", ma_scale)    # Moving Averages
+# Apply Scales to Columns
+ws.conditional_formatting.add(f"B2:B{max_row}", thrust_green) # Up 4% (0 to 200)
+ws.conditional_formatting.add(f"C2:C{max_row}", thrust_red)   # Down 4% (0 to 200)
+ws.conditional_formatting.add(f"D2:E{max_row}", ratio_scale)  # 5 & 10 Day Ratios (Anchored at 1.0)
+ws.conditional_formatting.add(f"F2:F{max_row}", breadth_green)# Advances (0 to 750)
+ws.conditional_formatting.add(f"G2:G{max_row}", breadth_red)  # Declines (0 to 750)
+ws.conditional_formatting.add(f"H2:H{max_row}", ratio_scale)  # A/D Ratio (Anchored at 1.0)
+ws.conditional_formatting.add(f"I2:L{max_row}", ma_scale)     # Moving Averages (0% to 100%)
+
+# 8. Auto-fit Columns based on content/header length
+for col in ws.columns:
+    max_length = 0
+    column = col[0].column_letter # Get the column letter (A, B, C...)
+    for cell in col:
+        try: 
+            if len(str(cell.value)) > max_length:
+                max_length = len(str(cell.value))
+        except:
+            pass
+    adjusted_width = (max_length + 2) # Add a tiny bit of padding so it looks clean
+    ws.column_dimensions[column].width = adjusted_width
 
 wb.save(file_name)
-print(f"\n--- SUCCESS! Endlessly growing file saved perfectly to {file_name}. ---")
+print(f"\n--- SUCCESS! Professional formatted file saved perfectly to {file_name}. ---")
