@@ -28,8 +28,8 @@ tickers = {
     "MNC": "^CNXMNC",
     "Media": "^CNXMEDIA",
     "PSU Bank": "^CNXPSUBANK",
-    "Consumer Durables": "^CNXCONS",
-    "Healthcare": "^CNXHLTH",
+    "Consumer Durables": "VOLTAS.NS", # Proxy heavyweight for Durables
+    "Healthcare": "HEALTHY.NS",       # Aditya BSL Nifty Healthcare ETF
     "Defence": "MODEFENCE.NS"
 }
 
@@ -196,7 +196,10 @@ for col in ws2.columns:
     for cell in col: cell.alignment = center_align
 
 rank_scale = ColorScaleRule(start_type='num', start_value=1, start_color='63BE7B', mid_type='num', mid_value=10, mid_color='FFFFFF', end_type='num', end_value=19, end_color='F8696B')
-ws2.conditional_formatting.add(f"B2:{ws2.columns[-1][0].column_letter}{ws2.max_row}", rank_scale)
+
+# BUG FIX: Get last column letter safely to avoid generator subscript error
+last_col_letter = ws2.cell(row=1, column=ws2.max_column).column_letter
+ws2.conditional_formatting.add(f"B2:{last_col_letter}{ws2.max_row}", rank_scale)
 
 wb.save(file_name)
 print(f"--- SUCCESS! Engine saved to {file_name} ---")
