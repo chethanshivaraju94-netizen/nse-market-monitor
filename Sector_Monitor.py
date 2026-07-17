@@ -108,8 +108,9 @@ for sector_name, symbol in tickers.items():
     rs_sma_50 = rs_line.rolling(50).mean().iloc[-1]
     rs_trend = "Up" if rs_line.iloc[-1] > rs_sma_50 else "Down"
     
+    # Continuous % Off RS High calculation
     rs_252_max = rs_line.rolling(252).max().iloc[-1]
-    rs_52w_high = "Yes" if rs_line.iloc[-1] >= rs_252_max else ""
+    pct_off_rs_high = ((rs_line.iloc[-1] - rs_252_max) / rs_252_max) * 100 if rs_252_max > 0 else 0.0
     
     # Rank Delta
     current_rank = historical_ranks[sector_name].iloc[-1]
@@ -117,7 +118,6 @@ for sector_name, symbol in tickers.items():
     
     rank_delta = 0
     if pd.notna(current_rank) and pd.notna(past_rank_1w):
-        # If past rank was 10, current is 4. Delta is +6
         rank_delta = int(past_rank_1w) - int(current_rank)
 
     metrics.append({
@@ -130,7 +130,7 @@ for sector_name, symbol in tickers.items():
         "21D RS %": round(rs_21d, 2),
         "65D RS %": round(rs_65d, 2),
         "RS Trend (>50 SMA)": rs_trend,
-        "52W RS High": rs_52w_high,
+        "% Off RS High": round(pct_off_rs_high, 2),
         "> 10 EMA": gt_10,
         "> 20 EMA": gt_20,
         "> 50 SMA": gt_50,
@@ -154,7 +154,6 @@ for r in df_heatmap.itertuples(index=False):
 
 # Tab 2: Historical Ranks Tracker
 ws2 = wb.create_sheet(title="Rotation Tracker")
-# Get last 65 trading days
 hist_tracker = historical_ranks.dropna(how='all').tail(65).sort_index(ascending=False)
 headers_t2 = ["Date"] + list(hist_tracker.columns)
 ws2.append(headers_t2)
@@ -168,10 +167,11 @@ green_fill = PatternFill(start_color="63BE7B", end_color="63BE7B", fill_type="so
 red_fill = PatternFill(start_color="F8696B", end_color="F8696B", fill_type="solid")
 center_align = Alignment(horizontal="center", vertical="center")
 
-# Tab 1 Formatting
+# Tab 1 Formatting (Dynamic Auto-Fit to Header Length)
 for col in ws1.columns:
     col_let = col[0].column_letter
-    ws1.column_dimensions[col_let].width = 15
+    header_len = len(str(col[0].value)) if col[0].value else 10
+    ws1.column_dimensions[col_let].width = header_len + 4 # Padding for readability
     for cell in col: cell.alignment = center_align
 
 # Conditional formatting for Time-Frame Matrices (Columns F, G, H - 5D, 21D, 65D RS)
@@ -182,22 +182,23 @@ ws1.conditional_formatting.add(f"F2:H{ws1.max_row}", rs_scale)
 ws1.conditional_formatting.add(f"I2:I{ws1.max_row}", CellIsRule(operator='equal', formula=['"Up"'], fill=green_fill))
 ws1.conditional_formatting.add(f"I2:I{ws1.max_row}", CellIsRule(operator='equal', formula=['"Down"'], fill=red_fill))
 
-ws1.conditional_formatting.add(f"J2:J{ws1.max_row}", CellIsRule(operator='equal', formula=['"Yes"'], fill=green_fill))
+# Continuous Formatting for % Off RS High (Column J)
+pct_off_scale = ColorScaleRule(start_type='num', start_value=-15.0, start_color='F8696B', mid_type='num', mid_value=-5.0, mid_color='FFFFFF', end_type='num', end_value=0.0, end_color='63BE7B')
+ws1.conditional_formatting.add(f"J2:J{ws1.max_row}", pct_off_scale)
 
 for col_let in ['K', 'L', 'M', 'N']: # Moving Averages
     ws1.conditional_formatting.add(f"{col_let}2:{col_let}{ws1.max_row}", CellIsRule(operator='equal', formula=['"Yes"'], fill=green_fill))
     ws1.conditional_formatting.add(f"{col_let}2:{col_let}{ws1.max_row}", CellIsRule(operator='equal', formula=['"No"'], fill=red_fill))
 
-# Tab 2 Formatting
+# Tab 2 Formatting (Dynamic Auto-Fit to Header Length)
 for col in ws2.columns:
     col_let = col[0].column_letter
-    ws2.column_dimensions[col_let].width = 12
+    header_len = len(str(col[0].value)) if col[0].value else 10
+    ws2.column_dimensions[col_let].width = header_len + 4 # Padding for readability
     for cell in col: cell.alignment = center_align
 
 # Adjusted for 18 total sectors (Midpoint 9, Max 18)
 rank_scale = ColorScaleRule(start_type='num', start_value=1, start_color='63BE7B', mid_type='num', mid_value=9, mid_color='FFFFFF', end_type='num', end_value=18, end_color='F8696B')
-
-# Get last column letter safely to avoid generator subscript error
 last_col_letter = ws2.cell(row=1, column=ws2.max_column).column_letter
 ws2.conditional_formatting.add(f"B2:{last_col_letter}{ws2.max_row}", rank_scale)
 
