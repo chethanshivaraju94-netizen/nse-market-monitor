@@ -28,7 +28,7 @@ tickers = {
     "MNC": "^CNXMNC",
     "Media": "^CNXMEDIA",
     "PSU Bank": "^CNXPSUBANK",
-    "Healthcare": "HEALTHY.NS", # Updated to the exact native index
+    "Healthcare": "HEALTHY.NS", 
     "Defence": "MODEFENCE.NS"
 }
 
@@ -212,11 +212,11 @@ green_fill = PatternFill(start_color="63BE7B", end_color="63BE7B", fill_type="so
 red_fill = PatternFill(start_color="F8696B", end_color="F8696B", fill_type="solid")
 center_align = Alignment(horizontal="center", vertical="center")
 
-# Tab 1 Formatting (Dynamic Auto-Fit to Header Length)
+# Tab 1 Formatting (Dynamic Auto-Fit to Maximum Value Length)
 for col in ws1.columns:
+    max_len = max(len(str(cell.value or '')) for cell in col)
     col_let = col[0].column_letter
-    header_len = len(str(col[0].value)) if col[0].value else 10
-    ws1.column_dimensions[col_let].width = header_len + 4 # Padding for readability
+    ws1.column_dimensions[col_let].width = max(max_len + 4, 12) # Padding for clear visual spacing
     for cell in col: cell.alignment = center_align
 
 # Conditional formatting for Time-Frame Matrices (Columns F, G, H - 5D, 21D, 65D RS)
@@ -235,11 +235,11 @@ for col_let in ['K', 'L', 'M', 'N']: # Moving Averages
     ws1.conditional_formatting.add(f"{col_let}2:{col_let}{ws1.max_row}", CellIsRule(operator='equal', formula=['"Yes"'], fill=green_fill))
     ws1.conditional_formatting.add(f"{col_let}2:{col_let}{ws1.max_row}", CellIsRule(operator='equal', formula=['"No"'], fill=red_fill))
 
-# Tab 2 Formatting (Dynamic Auto-Fit to Header Length)
+# Tab 2 Formatting (Dynamic Auto-Fit to Maximum Value Length)
 for col in ws2.columns:
+    max_len = max(len(str(cell.value or '')) for cell in col)
     col_let = col[0].column_letter
-    header_len = len(str(col[0].value)) if col[0].value else 10
-    ws2.column_dimensions[col_let].width = header_len + 4 # Padding for readability
+    ws2.column_dimensions[col_let].width = max(max_len + 4, 12) # Prevents dates and headers from clipping
     for cell in col: cell.alignment = center_align
 
 # Adjusted for 18 total sectors (Midpoint 9, Max 18)
