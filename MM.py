@@ -1,13 +1,22 @@
-import yfinance as yf
 import pandas as pd
+import numpy as np
 import os
+import time
 from datetime import datetime
+from tvDatafeed import TvDatafeed, Interval
 from openpyxl import Workbook
 from openpyxl.formatting.rule import ColorScaleRule
 from openpyxl.styles import PatternFill, Alignment
+import warnings
 
-print("--- NSE Market Monitor (Final VCP Master Engine - Reordered & Aligned) ---")
+# Suppress the unauthenticated session warning from tvDatafeed
+warnings.filterwarnings("ignore")
+
+print("--- NSE Market Monitor (Final VCP Master Engine - TradingView Data) ---")
 file_name = "NSE_Market_Monitor.xlsx"
+
+# 1. Initialize TradingView Connection
+tv = TvDatafeed()
 
 # Custom Python Color Engine for Nifty 500 Drawdown
 def get_drawdown_color(pct):
@@ -33,7 +42,7 @@ def get_drawdown_color(pct):
         b = int(255 - (255 - 107) * ratio)
     return f"{r:02X}{g:02X}{b:02X}"
 
-# 1. Define the upgraded layout with Benchmark Columns at the end
+# 2. Define the upgraded layout with Benchmark Columns at the end
 headers = [
     "Date", "Up 4% Today", "Down 4% Today", "5 Day Ratio", "10 Day Ratio", 
     "Advances", "Declines", "A/D Ratio", "52W Highs", "52W Lows", "Volume Breadth",
@@ -41,58 +50,76 @@ headers = [
     "Nifty 500 Close", "Nifty 500 Chg %"
 ]
 
-# 2. Fetch Nifty 500 Benchmark Data (^CRSLDX is the Yahoo ticker for Nifty 500)
-print("Fetching Nifty 500 Benchmark data...")
+# 3. Fetch Nifty 500 Benchmark Data (CNX500 on TradingView)
+print("Fetching Nifty 500 Benchmark data from TradingView...")
 n500_dict = {}
 try:
-    nifty500_raw = yf.download('^CRSLDX', period="2y")
+    nifty500_raw = tv.get_hist(symbol='CNX500', exchange='NSE', interval=Interval.in_daily, n_bars=300)
     
-    # Force flatten the dataframe if yfinance returns a MultiIndex
-    if isinstance(nifty500_raw.columns, pd.MultiIndex):
-        nifty500_raw.columns = nifty500_raw.columns.droplevel(1)
-        nifty500_raw = nifty500_raw.loc[:,~nifty500_raw.columns.duplicated()]
+    if nifty500_raw is not None and not nifty500_raw.empty:
+        nifty500_raw.index = pd.to_datetime(nifty500_raw.index).normalize()
+        nifty500_raw['Change'] = nifty500_raw['close'].pct_change() * 100
+        nifty500_raw['52W_High'] = nifty500_raw['high'].rolling(window=252).max()
+        nifty500_raw['Pct_Off_High'] = ((nifty500_raw['close'] - nifty500_raw['52W_High']) / nifty500_raw['52W_High']) * 100
         
-    nifty500_raw['Change'] = nifty500_raw['Close'].pct_change() * 100
-    nifty500_raw['52W_High'] = nifty500_raw['High'].rolling(window=252).max()
-    nifty500_raw['Pct_Off_High'] = ((nifty500_raw['Close'] - nifty500_raw['52W_High']) / nifty500_raw['52W_High']) * 100
-    
-    for ts, r in nifty500_raw.iterrows():
-        d_str = ts.strftime("%Y-%m-%d")
-        
-        try:
-            c_val = float(r['Close'])
-            chg_val = float(r['Change'])
-            pct_val = float(r['Pct_Off_High'])
-        except:
-            c_val, chg_val, pct_val = None, None, None
+        for ts, r in nifty500_raw.iterrows():
+            d_str = ts.strftime("%Y-%m-%d")
+            try:
+                c_val = float(r['close'])
+                chg_val = float(r['Change'])
+                pct_val = float(r['Pct_Off_High'])
+            except:
+                c_val, chg_val, pct_val = None, None, None
 
-        n500_dict[d_str] = {
-            'Close': round(c_val, 2) if pd.notna(c_val) else "",
-            'Change': round(chg_val, 2) if pd.notna(chg_val) else "",
-            'Pct_Off': round(pct_val, 2) if pd.notna(pct_val) else ""
-        }
+            n500_dict[d_str] = {
+                'Close': round(c_val, 2) if pd.notna(c_val) else "",
+                'Change': round(chg_val, 2) if pd.notna(chg_val) else "",
+                'Pct_Off': round(pct_val, 2) if pd.notna(pct_val) else ""
+            }
 except Exception as e:
     print(f"Warning: Could not fetch Nifty 500 data: {e}")
 
-# 3. Fetch the Nifty Total Market universe list
+# 4. Fetch the Nifty Total Market universe list
 print("Fetching Nifty Total Market universe list...")
 try:
     url = "https://archives.nseindia.com/content/indices/ind_niftytotalmarket_list.csv"
     nifty_total_df = pd.read_csv(url, storage_options={'User-Agent': 'Mozilla/5.0'})
-    tickers = [str(symbol) + ".NS" for symbol in nifty_total_df['Symbol']]
+    # TradingView uses strict symbols without the .NS suffix
+    tickers = [str(symbol) for symbol in nifty_total_df['Symbol']]
 except Exception as e:
     print(f"Error fetching live list: {e}. Falling back to standard list.")
-    tickers = ["RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS"]
+    tickers = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "SBIN"]
 
-# 4. Download full OHLCV data for Breadth Metrics
-print("Downloading breadth data from Yahoo Finance (this may take 1-2 minutes)...")
-raw_data = yf.download(tickers, period="2y")
+# 5. Download full OHLCV data for Breadth Metrics via TradingView Datafeed
+print(f"Downloading breadth data for {len(tickers)} stocks from TradingView...")
+print("(This may take 5-10 minutes due to required rate-limiting batches)")
 
-close_df = raw_data['Close'].dropna(how='all', axis=1)
-valid_tickers = close_df.columns
-high_df = raw_data['High'][valid_tickers]
-low_df = raw_data['Low'][valid_tickers]
-vol_df = raw_data['Volume'][valid_tickers]
+close_dict, high_dict, low_dict, vol_dict = {}, {}, {}, {}
+
+for i, sym in enumerate(tickers):
+    try:
+        # Micro-pause every 50 requests to prevent HTTP 429 Too Many Requests bans
+        if i > 0 and i % 50 == 0:
+            time.sleep(1)
+            print(f"Processed {i}/{len(tickers)} symbols...")
+            
+        df = tv.get_hist(symbol=sym, exchange='NSE', interval=Interval.in_daily, n_bars=300)
+        
+        if df is not None and not df.empty:
+            # Normalize index to Date only (00:00:00) for clean merging
+            df.index = pd.to_datetime(df.index).normalize()
+            close_dict[sym] = df['close']
+            high_dict[sym] = df['high']
+            low_dict[sym] = df['low']
+            vol_dict[sym] = df['volume']
+    except Exception as e:
+        continue
+
+# Assemble the final dataframes
+close_df = pd.DataFrame(close_dict)
+high_df = pd.DataFrame(high_dict)
+low_df = pd.DataFrame(low_dict)
+vol_df = pd.DataFrame(vol_dict)
 
 print("Calculating daily breadth, volume, and technical matrices...")
 daily_returns_df = close_df.pct_change() * 100
@@ -109,7 +136,11 @@ lookback_days = 65
 if len(close_df) < lookback_days: lookback_days = len(close_df) - 1
 
 for i in range(-lookback_days, 0):
-    date_str = close_df.index[i].strftime("%Y-%m-%d")
+    try:
+        date_str = close_df.index[i].strftime("%Y-%m-%d")
+    except:
+        continue
+        
     day_close = close_df.iloc[i]
     day_returns = daily_returns_df.iloc[i]
     day_high = high_df.iloc[i]
@@ -158,12 +189,16 @@ for i in range(-lookback_days, 0):
         "> 200 SMA (%)": pct_200, "> 50 SMA (%)": pct_50, "> 20 EMA (%)": pct_20, "> 10 EMA (%)": pct_10
     })
 
+if not history_data:
+    print("Error: No history data calculated. Check datafeed availability.")
+    exit(1)
+
 df_recent = pd.DataFrame(history_data)
 df_recent['5 Day Ratio'] = (df_recent['Up 4% Today'].rolling(5).sum() / df_recent['Down 4% Today'].rolling(5).sum().replace(0, 1)).round(2)
 df_recent['10 Day Ratio'] = (df_recent['Up 4% Today'].rolling(10).sum() / df_recent['Down 4% Today'].rolling(10).sum().replace(0, 1)).round(2)
 df_recent = df_recent.sort_values(by="Date", ascending=False)
 
-# 5. Smart Merge & Benchmark Backfill
+# 6. Smart Merge & Benchmark Backfill
 print("Merging with archive and backfilling Nifty 500 Data...")
 if os.path.exists(file_name):
     try:
@@ -194,7 +229,7 @@ for idx, row in df_combined.iterrows():
 df_final = df_combined.sort_values(by="Date", ascending=False)
 df_final = df_final.fillna("") 
 
-# 6. Rebuild Excel File (Columns properly ordered)
+# 7. Rebuild Excel File (Columns properly ordered)
 if os.path.exists(file_name):
     os.remove(file_name)
 
@@ -217,12 +252,12 @@ for index, row in df_final.iterrows():
         row['Nifty 500 Close'], row['Nifty 500 Chg %']
     ])
     
-    # 7A. Apply Custom Python Paint directly to the Nifty 500 Price (Now moved to Column P)
+    # Apply Custom Python Paint directly to the Nifty 500 Price (Column P)
     current_row = ws.max_row
     color_hex = get_drawdown_color(pct_off)
     ws[f"P{current_row}"].fill = PatternFill(start_color=color_hex, end_color=color_hex, fill_type="solid")
 
-# 7B. Apply Fixed Quantitative Conditional Formatting to shifted columns
+# 8. Apply Fixed Quantitative Conditional Formatting
 max_row = ws.max_row
 ws.conditional_formatting._cf_rules = {}
 
@@ -246,14 +281,14 @@ ws.conditional_formatting.add(f"K2:K{max_row}", ratio_scale)   # Volume Breadth
 ws.conditional_formatting.add(f"L2:O{max_row}", ma_scale)      # Moving Averages 
 ws.conditional_formatting.add(f"Q2:Q{max_row}", n500_chg_scale)# Nifty 500 Chg % (-2% to 2%)
 
-# 8. Formatting: Auto-fit & Center Alignment
+# 9. Formatting: Auto-fit & Center Alignment
 center_aligned_text = Alignment(horizontal="center", vertical="center")
 
 for col in ws.columns:
     max_length = 0
     column = col[0].column_letter 
     for cell in col:
-        cell.alignment = center_aligned_text # Apply center alignment to every cell
+        cell.alignment = center_aligned_text 
         try: 
             if len(str(cell.value)) > max_length:
                 max_length = len(str(cell.value))
