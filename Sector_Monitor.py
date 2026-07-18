@@ -12,6 +12,7 @@ file_name = "NSE_Sector_Monitor.xlsx"
 benchmark_ticker = "^CRSLDX" # Nifty 500
 
 tickers = {
+    # Broad & Sectoral
     "IT": "ITBEES.NS",               
     "Bank": "BANKBEES.NS",           
     "Private Bank": "HDFCPVTBAN.NS", 
@@ -26,13 +27,21 @@ tickers = {
     "Infrastructure": "INFRAIETF.NS",
     "Consumption": "CONSUMBEES.NS",  
     "PSE": "ABSLPSE.NS",             
-    "Defence": "MODEFENCE.NS",       
     "Energy": "MOENERGY.NS",         
-    "Oil & Gas": "OILIETF.NS",       
     "Commodities": "COMMOIETF.NS",   
+    "MNC": "MNC.NS",
+    
+    # Thematic & Niche
+    "Defence": "MODEFENCE.NS",       
+    "Oil & Gas": "OILIETF.NS",       
     "Chemicals": "CHEMICAL.NS",      
-    "Manufacturing": "MAKEINDIA.NS", 
-    "MNC": "MNC.NS"                  
+    "Manufacturing": "MAKEINDIA.NS",
+    "Capital Market": "MOCAPITAL.NS",
+    "Digital": "TNIDETF.NS",          
+    "Internet": "INTERNET.NS",        
+    "Tourism": "MOTOUR.NS",           
+    "Services": "MOSERVICE.NS",       
+    "EV & New Age Auto": "GROWWEV.NS" 
 }
 
 # 1. Download Data
