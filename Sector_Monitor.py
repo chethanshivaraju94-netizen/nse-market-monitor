@@ -12,24 +12,23 @@ file_name = "NSE_Sector_Monitor.xlsx"
 benchmark_ticker = "^CRSLDX" # Nifty 500
 
 tickers = {
-    "IT": "^CNXIT",
-    "Bank": "^NSEBANK",
-    "Auto": "^CNXAUTO",
-    "FMCG": "^CNXFMCG",
-    "Pharma": "^CNXPHARMA",
-    "Metal": "^CNXMETAL",
-    "Energy": "^CNXENERGY",
-    "Realty": "^CNXREALTY",
-    "Fin Services": "NIFTY_FIN_SERVICE.NS",
-    "Infrastructure": "^CNXINFRA",
-    "Consumption": "^CNXCONSUM",
-    "Commodities": "^CNXCMDT",
-    "PSE": "^CNXPSE",
-    "MNC": "^CNXMNC",
-    "Media": "^CNXMEDIA",
-    "PSU Bank": "^CNXPSUBANK",
-    "Healthcare": "HEALTHY.NS", 
-    "Defence": "MODEFENCE.NS"
+    "IT": "ITBEES.NS",               
+    "Bank": "BANKBEES.NS",           
+    "Auto": "AUTOBEES.NS",           
+    "FMCG": "FMCGIETF.NS",           
+    "Pharma": "PHARMABEES.NS",       
+    "Metal": "METALIETF.NS",         
+    "Realty": "MOREALTY.NS",         
+    "Fin Services": "FINIETF.NS",    
+    "Infrastructure": "INFRAIETF.NS",
+    "Consumption": "CONSUMBEES.NS",  
+    "PSE": "ABSLPSE.NS",             
+    "PSU Bank": "PSUBNKBEES.NS",     
+    "Healthcare": "HEALTHY.NS",      
+    "Defence": "MODEFENCE.NS",       
+    "Energy": "MOENERGY.NS",         
+    "Commodities": "COMMOIETF.NS",   
+    "MNC": "MNC.NS"                  
 }
 
 # 1. Download Data
@@ -242,8 +241,11 @@ for col in ws2.columns:
     ws2.column_dimensions[col_let].width = max(max_len + 4, 12) # Prevents dates and headers from clipping
     for cell in col: cell.alignment = center_align
 
-# Adjusted for 18 total sectors (Midpoint 9, Max 18)
-rank_scale = ColorScaleRule(start_type='num', start_value=1, start_color='63BE7B', mid_type='num', mid_value=9, mid_color='FFFFFF', end_type='num', end_value=18, end_color='F8696B')
+# Dynamically adjusted scale for varying number of total sectors
+num_sectors = len(tickers)
+mid_rank = (num_sectors // 2) + 1
+rank_scale = ColorScaleRule(start_type='num', start_value=1, start_color='63BE7B', mid_type='num', mid_value=mid_rank, mid_color='FFFFFF', end_type='num', end_value=num_sectors, end_color='F8696B')
+
 last_col_letter = ws2.cell(row=1, column=ws2.max_column).column_letter
 ws2.conditional_formatting.add(f"B2:{last_col_letter}{ws2.max_row}", rank_scale)
 
