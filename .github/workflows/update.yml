@@ -26,15 +26,13 @@ jobs:
 
     - name: Run Market Monitor Script
       run: python MM.py
-      
-    - name: Run Sector Monitor Script
-      run: python Sector_Monitor.py
-      
+
     - name: Commit and Push Updated Excel File
       run: |
+        # Optional: Change these to your actual name and email if you want the GitHub commits to look like you too!
         git config --global user.name "Chethan"
         git config --global user.email "your.email@gmail.com"
-        git add *.xlsx
+        git add NSE_Market_Monitor.xlsx
         git diff-index --quiet HEAD || git commit -m "Automated daily update: $(date +'%Y-%m-%d')"
         git push
 
@@ -50,5 +48,5 @@ jobs:
         ${{ secrets.RCLONE_CONFIG_DATA }}
         EOF
         
-        # Sync BOTH Excel files simultaneously to your MarketMonitor folder
-        rclone copy . gdrive:MarketMonitor --include "*.xlsx"
+        # Sync directly to a folder named "MarketMonitor" in your personal Drive
+        rclone copy NSE_Market_Monitor.xlsx gdrive:MarketMonitor
