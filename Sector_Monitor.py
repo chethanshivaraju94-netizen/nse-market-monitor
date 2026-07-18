@@ -46,8 +46,53 @@ if isinstance(raw_data.columns, pd.MultiIndex):
 else:
     close_data = raw_data['Close']
 
+# --- QUOTE PATCH: Fix YF's lagging chart API using real-time overview quotes ---
+print("Patching delayed Yahoo Finance charts with live overview quotes...")
+live_prices = {}
+for symbol in all_tickers:
+    try:
+        t = yf.Ticker(symbol)
+        try:
+            price = t.fast_info.last_price
+        except AttributeError:
+            price = t.info.get('regularMarketPrice', np.nan)
+            
+        if pd.notna(price):
+            live_prices[symbol] = float(price)
+    except Exception:
+        pass
+
+if live_prices:
+    last_row_nans = close_data.iloc[-1].isna().sum()
+    
+    if last_row_nans > 0:
+        # The chart created today's row, but some indices are missing candles. Overwrite them.
+        for symbol, price in live_prices.items():
+            if symbol in close_data.columns:
+                close_data.loc[close_data.index[-1], symbol] = price
+    else:
+        # The chart has no NaNs, meaning it might be fully stuck on yesterday. Check benchmark drift.
+        bench_live = live_prices.get(benchmark_ticker)
+        bench_chart = close_data[benchmark_ticker].iloc[-1] if benchmark_ticker in close_data.columns else None
+        
+        # If the live quote deviates significantly from the chart, append a new daily row.
+        if bench_live and pd.notna(bench_chart) and abs(bench_live - bench_chart) > 2.0:
+            print("Appending missing daily candle...")
+            new_idx = close_data.index[-1] + pd.Timedelta(days=1)
+            close_data.loc[new_idx] = np.nan
+            for symbol, price in live_prices.items():
+                if symbol in close_data.columns:
+                    close_data.loc[new_idx, symbol] = price
+        else:
+            # The chart is fully up to date, just enforce precision from the quote API
+            for symbol, price in live_prices.items():
+                if symbol in close_data.columns:
+                    close_data.loc[close_data.index[-1], symbol] = price
+
+# Now apply forward fill for older historical gaps
 close_data = close_data.ffill().dropna(how='all')
 benchmark_close = close_data[benchmark_ticker]
+# -------------------------------------------------------------------------------
 
 # 2. Calculate Sector Matrices
 print("Calculating Relative Strength and Moving Averages...")
