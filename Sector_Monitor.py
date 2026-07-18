@@ -1,174 +1,206 @@
+import yfinance as yf
 import pandas as pd
 import numpy as np
-from tvDatafeed import TvDatafeed, Interval
-import openpyxl
+import os
+from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Alignment, Font
-from openpyxl.formatting.rule import ColorScaleRule
-import warnings
+from openpyxl.formatting.rule import ColorScaleRule, CellIsRule
 
-# Suppress the unauthenticated session warning from tvDatafeed
-warnings.filterwarnings("ignore")
-
-print("--- NSE Sector Rotation Engine Initiated (TradingView Data) ---")
-
-# 1. Initialize TradingView Connection
-tv = TvDatafeed()
+print("--- NSE Sector Rotation Engine Initiated ---")
 
 file_name = "NSE_Sector_Monitor.xlsx"
-benchmark_ticker = "CNX500" # Nifty 500
+benchmark_ticker = "^CRSLDX" # Nifty 500
 
-# Updated dictionary using strict TradingView NSE symbol conventions
 tickers = {
-    "IT": "CNXIT",
-    "Bank": "BANKNIFTY",
-    "Auto": "CNXAUTO",
-    "FMCG": "CNXFMCG",
-    "Pharma": "CNXPHARMA",
-    "Metal": "CNXMETAL",
-    "Energy": "CNXENERGY",
-    "Realty": "CNXREALTY",
-    "Fin Services": "CNXFIN",
-    "Infrastructure": "CNXINFRA",
-    "Consumption": "CNXCONSUM",
-    "Commodities": "CNXCMDT",
-    "PSE": "CNXPSE",
-    "MNC": "CNXMNC",
-    "Media": "CNXMEDIA",
-    "PSU Bank": "CNXPSUBANK",
-    "Healthcare": "NIFTY_HEALTHCARE",
-    "Defence": "MODEFENCE"
+    "IT": "^CNXIT",
+    "Bank": "^NSEBANK",
+    "Auto": "^CNXAUTO",
+    "FMCG": "^CNXFMCG",
+    "Pharma": "^CNXPHARMA",
+    "Metal": "^CNXMETAL",
+    "Energy": "^CNXENERGY",
+    "Realty": "^CNXREALTY",
+    "Fin Services": "^CNXFIN",
+    "Infrastructure": "^CNXINFRA",
+    "Consumption": "^CNXCONSUM",
+    "Commodities": "^CNXCMDT",
+    "PSE": "^CNXPSE",
+    "MNC": "^CNXMNC",
+    "Media": "^CNXMEDIA",
+    "PSU Bank": "^CNXPSUBANK",
+    "Healthcare": "HEALTHY.NS",       # Aditya BSL Nifty Healthcare ETF
+    "Defence": "MODEFENCE.NS"
 }
 
-def fetch_data(symbol, n_bars=300):
-    try:
-        # Requesting daily interval bars directly from the NSE exchange logic
-        df = tv.get_hist(symbol=symbol, exchange='NSE', interval=Interval.in_daily, n_bars=n_bars)
-        if df is not None and not df.empty:
-            return df[['close']]
-        return None
-    except Exception as e:
-        print(f"Error fetching {symbol}: {e}")
-        return None
+# 1. Download Data
+print("Downloading 2-Year Market Data...")
+all_tickers = list(tickers.values()) + [benchmark_ticker]
+raw_data = yf.download(all_tickers, period="2y", group_by='ticker')
 
-# 2. Fetch Benchmark
-print(f"Fetching Benchmark: {benchmark_ticker}")
-bench_df = fetch_data(benchmark_ticker)
-if bench_df is None:
-    raise ValueError("Failed to fetch benchmark data. Exiting.")
+# Check for multi-index formatting from yfinance
+if isinstance(raw_data.columns, pd.MultiIndex):
+    close_data = pd.DataFrame()
+    for t in all_tickers:
+        if t in raw_data:
+            close_data[t] = raw_data[t]['Close']
+else:
+    close_data = raw_data['Close']
 
-results = []
+close_data = close_data.ffill().dropna(how='all')
+benchmark_close = close_data[benchmark_ticker]
 
-# 3. Process Sector Data & Calculate Indicators
-for sector, symbol in tickers.items():
-    print(f"Fetching Sector: {sector}")
-    sector_df = fetch_data(symbol)
-    if sector_df is None:
+# 2. Calculate Sector Matrices
+print("Calculating Relative Strength and Moving Averages...")
+metrics = []
+historical_ranks = pd.DataFrame(index=close_data.index, columns=tickers.keys())
+
+# Calculate daily ranks for Tab 2
+for date_idx in range(65, len(close_data)):
+    daily_rs_returns = {}
+    for sector_name, symbol in tickers.items():
+        if symbol not in close_data.columns: continue
+        
+        sector_series = close_data[symbol].iloc[:date_idx+1]
+        bench_series = benchmark_close.iloc[:date_idx+1]
+        
+        # RS Line = Sector Price / Benchmark Price
+        rs_line = sector_series / bench_series
+        
+        # 65-Day RS Momentum
+        if len(rs_line) > 65:
+            rs_65d = ((rs_line.iloc[-1] - rs_line.iloc[-66]) / rs_line.iloc[-66]) * 100
+            daily_rs_returns[sector_name] = rs_65d
+            
+    # Rank them for this specific day (Highest RS % = Rank 1)
+    if daily_rs_returns:
+        sorted_ranks = sorted(daily_rs_returns.items(), key=lambda x: x[1], reverse=True)
+        for rank, (sec, val) in enumerate(sorted_ranks, 1):
+            historical_ranks.at[close_data.index[date_idx], sec] = rank
+
+# Today's Calculations for Tab 1
+for sector_name, symbol in tickers.items():
+    if symbol not in close_data.columns: 
+        print(f"Warning: {sector_name} ({symbol}) data unavailable.")
         continue
         
-    # Align sector dates perfectly with the benchmark
-    df = pd.merge(sector_df, bench_df, left_index=True, right_index=True, suffixes=('', '_bench'))
+    sec_close = close_data[symbol]
+    rs_line = sec_close / benchmark_close
     
-    # Calculate Base RS Line
-    df['RS_Line'] = df['close'] / df['close_bench']
+    # Base Price Metrics
+    chg_1d = ((sec_close.iloc[-1] - sec_close.iloc[-2]) / sec_close.iloc[-2]) * 100
     
-    # Calculate Institutional Momentum (Lookbacks)
-    df['5D_RS'] = df['RS_Line'].pct_change(periods=5) * 100
-    df['21D_RS'] = df['RS_Line'].pct_change(periods=21) * 100
-    df['65D_RS'] = df['RS_Line'].pct_change(periods=65) * 100
+    # Moving Averages
+    ema_10 = sec_close.ewm(span=10, adjust=False).mean().iloc[-1]
+    ema_20 = sec_close.ewm(span=20, adjust=False).mean().iloc[-1]
+    sma_50 = sec_close.rolling(50).mean().iloc[-1]
+    sma_200 = sec_close.rolling(200).mean().iloc[-1]
     
-    # Standard Exponential and Simple Moving Averages for Absolute Trend
-    df['10_EMA'] = df['close'].ewm(span=10, adjust=False).mean()
-    df['20_EMA'] = df['close'].ewm(span=20, adjust=False).mean()
-    df['50_SMA'] = df['close'].rolling(window=50).mean()
-    df['200_SMA'] = df['close'].rolling(window=200).mean()
+    gt_10 = "Yes" if sec_close.iloc[-1] > ema_10 else "No"
+    gt_20 = "Yes" if sec_close.iloc[-1] > ema_20 else "No"
+    gt_50 = "Yes" if sec_close.iloc[-1] > sma_50 else "No"
+    gt_200 = "Yes" if sec_close.iloc[-1] > sma_200 else "No"
     
-    # Macro RS Trend (> 50 SMA of the RS Line)
-    df['RS_50_SMA'] = df['RS_Line'].rolling(window=50).mean()
+    # RS Metrics
+    rs_5d = ((rs_line.iloc[-1] - rs_line.iloc[-6]) / rs_line.iloc[-6]) * 100 if len(rs_line) > 5 else 0
+    rs_21d = ((rs_line.iloc[-1] - rs_line.iloc[-22]) / rs_line.iloc[-22]) * 100 if len(rs_line) > 21 else 0
+    rs_65d = ((rs_line.iloc[-1] - rs_line.iloc[-66]) / rs_line.iloc[-66]) * 100 if len(rs_line) > 65 else 0
     
-    # VCP Structure: % Off 52-Week RS High
-    df['RS_252_High'] = df['RS_Line'].rolling(window=252).max()
-    df['Pct_Off_RS_High'] = ((df['RS_Line'] - df['RS_252_High']) / df['RS_252_High']) * 100
+    rs_sma_50 = rs_line.rolling(50).mean().iloc[-1]
+    rs_trend = "Up" if rs_line.iloc[-1] > rs_sma_50 else "Down"
     
-    # Skip indices that don't have enough historical data to generate the SMAs
-    if len(df) < 70:
-        continue
-        
-    # Extract structural prints for the current and prior week
-    latest = df.iloc[-1]
-    prev = df.iloc[-2]
-    prev_week = df.iloc[-6]
+    # Continuous % Off RS High calculation
+    rs_252_max = rs_line.rolling(252).max().iloc[-1]
+    pct_off_rs_high = ((rs_line.iloc[-1] - rs_252_max) / rs_252_max) * 100 if rs_252_max > 0 else 0.0
     
-    close_val = latest['close']
-    pct_chg = ((latest['close'] - prev['close']) / prev['close']) * 100
+    # Rank Delta
+    current_rank = historical_ranks[sector_name].iloc[-1]
+    past_rank_1w = historical_ranks[sector_name].iloc[-6] # 5 trading days ago
     
-    rs_trend = "Up" if latest['RS_Line'] > latest['RS_50_SMA'] else "Down"
-    
-    results.append({
-        'Sector': sector,
-        'Close': round(close_val, 2),
-        '% Chg': round(pct_chg, 2),
-        '5D RS %': round(latest['5D_RS'], 2),
-        '21D RS %': round(latest['21D_RS'], 2),
-        '65D RS %': round(latest['65D_RS'], 2),
-        'RS Trend (>50 SMA)': rs_trend,
-        '% Off RS High': round(latest['Pct_Off_RS_High'], 2),
-        '> 10 EMA': "Yes" if close_val > latest['10_EMA'] else "No",
-        '> 20 EMA': "Yes" if close_val > latest['20_EMA'] else "No",
-        '> 50 SMA': "Yes" if close_val > latest['50_SMA'] else "No",
-        '> 200 SMA': "Yes" if close_val > latest['200_SMA'] else "No",
-        '65D_Raw': latest['65D_RS'],
-        'Prev_65D_Raw': prev_week['65D_RS']
+    rank_delta = 0
+    if pd.notna(current_rank) and pd.notna(past_rank_1w):
+        rank_delta = int(past_rank_1w) - int(current_rank)
+
+    metrics.append({
+        "Sector": sector_name,
+        "65D RS Rank": current_rank,
+        "1-Week Rank Delta": f"+{rank_delta}" if rank_delta > 0 else str(rank_delta),
+        "Close": round(sec_close.iloc[-1], 2),
+        "% Chg": round(chg_1d, 2),
+        "5D RS %": round(rs_5d, 2),
+        "21D RS %": round(rs_21d, 2),
+        "65D RS %": round(rs_65d, 2),
+        "RS Trend (>50 SMA)": rs_trend,
+        "% Off RS High": round(pct_off_rs_high, 2),
+        "> 10 EMA": gt_10,
+        "> 20 EMA": gt_20,
+        "> 50 SMA": gt_50,
+        "> 200 SMA": gt_200
     })
 
-final_df = pd.DataFrame(results)
+df_heatmap = pd.DataFrame(metrics).sort_values(by="65D RS Rank", ascending=True)
 
-# 4. Rank Engine & Delta Calculation
-final_df['65D RS Rank'] = final_df['65D_Raw'].rank(ascending=False, method='min').astype(int)
-final_df['Prev_Rank'] = final_df['Prev_65D_Raw'].rank(ascending=False, method='min').astype(int)
-final_df['1-Week Rank Delta'] = final_df['Prev_Rank'] - final_df['65D RS Rank']
+# 3. Build Excel File
+print("Writing Engine to Excel...")
+wb = Workbook()
 
-# Clean up temporary arrays and sort structurally
-final_df = final_df.drop(columns=['65D_Raw', 'Prev_65D_Raw', 'Prev_Rank'])
-final_df = final_df.sort_values(by='65D RS Rank')
+# Tab 1: Cross-Sectional Heatmap
+ws1 = wb.active
+ws1.title = "Heatmap"
+headers_t1 = df_heatmap.columns.tolist()
+ws1.append(headers_t1)
 
-# Standardize output column architecture
-cols = ['Sector', '65D RS Rank', '1-Week Rank Delta', 'Close', '% Chg', '5D RS %', '21D RS %', '65D RS %', 'RS Trend (>50 SMA)', '% Off RS High', '> 10 EMA', '> 20 EMA', '> 50 SMA', '> 200 SMA']
-final_df = final_df[cols]
+for r in df_heatmap.itertuples(index=False):
+    ws1.append(list(r))
 
-# 5. Dashboard Generation and Excel Styling
-final_df.to_excel(file_name, index=False, sheet_name="Sector Momentum")
-wb = openpyxl.load_workbook(file_name)
-ws = wb["Sector Momentum"]
+# Tab 2: Historical Ranks Tracker
+ws2 = wb.create_sheet(title="Rotation Tracker")
+hist_tracker = historical_ranks.dropna(how='all').tail(65).sort_index(ascending=False)
+headers_t2 = ["Date"] + list(hist_tracker.columns)
+ws2.append(headers_t2)
 
-green_fill = PatternFill(start_color="85E085", end_color="85E085", fill_type="solid")
-red_fill = PatternFill(start_color="FF9999", end_color="FF9999", fill_type="solid")
+for date, row in hist_tracker.iterrows():
+    r_data = [date.strftime("%Y-%m-%d")] + [row[col] for col in hist_tracker.columns]
+    ws2.append(r_data)
 
-for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
-    for cell in row:
-        cell.alignment = Alignment(horizontal='center')
-        
-        # Color the absolute trend blocks
-        if cell.column == cols.index('RS Trend (>50 SMA)') + 1:
-            if cell.value == "Up":
-                cell.fill = green_fill
-            elif cell.value == "Down":
-                cell.fill = red_fill
-                
-        # Color the boolean MA filters
-        ma_cols = ['> 10 EMA', '> 20 EMA', '> 50 SMA', '> 200 SMA']
-        if cols[cell.column - 1] in ma_cols:
-            if cell.value == "Yes":
-                cell.fill = green_fill
-            elif cell.value == "No":
-                cell.fill = red_fill
+# 4. Apply UI Formatting
+green_fill = PatternFill(start_color="63BE7B", end_color="63BE7B", fill_type="solid")
+red_fill = PatternFill(start_color="F8696B", end_color="F8696B", fill_type="solid")
+center_align = Alignment(horizontal="center", vertical="center")
 
-# Apply heatmap logic to the relative percentage columns
-color_scale = ColorScaleRule(start_type='min', start_color='FF9999', mid_type='num', mid_value=0, mid_color='FFFFFF', end_type='max', end_color='85E085')
-numeric_cols = ['% Chg', '5D RS %', '21D RS %', '65D RS %', '% Off RS High']
-for col_name in numeric_cols:
-    col_idx = cols.index(col_name) + 1
-    col_letter = openpyxl.utils.get_column_letter(col_idx)
-    ws.conditional_formatting.add(f'{col_letter}2:{col_letter}{ws.max_row}', color_scale)
+# Tab 1 Formatting (Dynamic Auto-Fit to Header Length)
+for col in ws1.columns:
+    col_let = col[0].column_letter
+    header_len = len(str(col[0].value)) if col[0].value else 10
+    ws1.column_dimensions[col_let].width = header_len + 4 # Padding for readability
+    for cell in col: cell.alignment = center_align
+
+# Conditional formatting for Time-Frame Matrices (Columns F, G, H - 5D, 21D, 65D RS)
+rs_scale = ColorScaleRule(start_type='num', start_value=-10, start_color='F8696B', mid_type='num', mid_value=0, mid_color='FFFFFF', end_type='num', end_value=10, end_color='63BE7B')
+ws1.conditional_formatting.add(f"F2:H{ws1.max_row}", rs_scale)
+
+# Conditional Formatting for Binary Indicators
+ws1.conditional_formatting.add(f"I2:I{ws1.max_row}", CellIsRule(operator='equal', formula=['"Up"'], fill=green_fill))
+ws1.conditional_formatting.add(f"I2:I{ws1.max_row}", CellIsRule(operator='equal', formula=['"Down"'], fill=red_fill))
+
+# Continuous Formatting for % Off RS High (Column J)
+pct_off_scale = ColorScaleRule(start_type='num', start_value=-15.0, start_color='F8696B', mid_type='num', mid_value=-5.0, mid_color='FFFFFF', end_type='num', end_value=0.0, end_color='63BE7B')
+ws1.conditional_formatting.add(f"J2:J{ws1.max_row}", pct_off_scale)
+
+for col_let in ['K', 'L', 'M', 'N']: # Moving Averages
+    ws1.conditional_formatting.add(f"{col_let}2:{col_let}{ws1.max_row}", CellIsRule(operator='equal', formula=['"Yes"'], fill=green_fill))
+    ws1.conditional_formatting.add(f"{col_let}2:{col_let}{ws1.max_row}", CellIsRule(operator='equal', formula=['"No"'], fill=red_fill))
+
+# Tab 2 Formatting (Dynamic Auto-Fit to Header Length)
+for col in ws2.columns:
+    col_let = col[0].column_letter
+    header_len = len(str(col[0].value)) if col[0].value else 10
+    ws2.column_dimensions[col_let].width = header_len + 4 # Padding for readability
+    for cell in col: cell.alignment = center_align
+
+# Adjusted for 18 total sectors (Midpoint 9, Max 18)
+rank_scale = ColorScaleRule(start_type='num', start_value=1, start_color='63BE7B', mid_type='num', mid_value=9, mid_color='FFFFFF', end_type='num', end_value=18, end_color='F8696B')
+last_col_letter = ws2.cell(row=1, column=ws2.max_column).column_letter
+ws2.conditional_formatting.add(f"B2:{last_col_letter}{ws2.max_row}", rank_scale)
 
 wb.save(file_name)
-print("--- Dashboard Exported Successfully ---")
+print(f"--- SUCCESS! Engine saved to {file_name} ---")
