@@ -74,14 +74,20 @@ try:
 except Exception as e:
     print(f"Warning: Could not fetch Nifty 500 data: {e}")
 
-# 3. Fetch the Nifty Total Market universe list
-print("Fetching Nifty Total Market universe list...")
+# 3. Fetch the Nifty Total Market universe list dynamically via Proxy
+print("Fetching Nifty Total Market universe list via proxy...")
 try:
-    url = "https://archives.nseindia.com/content/indices/ind_niftytotalmarket_list.csv"
-    nifty_total_df = pd.read_csv(url, storage_options={'User-Agent': 'Mozilla/5.0'})
+    nse_url = "https://archives.nseindia.com/content/indices/ind_niftytotalmarket_list.csv"
+    proxy_url = f"https://api.allorigins.win/raw?url={nse_url}"
+    
+    # Mask the GitHub Actions cloud runner signature with full desktop browser headers
+    nifty_total_df = pd.read_csv(
+        proxy_url, 
+        storage_options={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'}
+    )
     tickers = [str(symbol) + ".NS" for symbol in nifty_total_df['Symbol']]
 except Exception as e:
-    print(f"Error fetching live list: {e}. Falling back to standard list.")
+    print(f"Error fetching live list via proxy: {e}. Falling back to standard list.")
     tickers = ["RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS"]
 
 # 4. Download full OHLCV data for Breadth Metrics
