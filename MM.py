@@ -16,9 +16,9 @@ def get_drawdown_color(pct):
         pct = float(pct)
     except:
         return "FFFFFF"
-    
-    if pct >= 0: return "63BE7B"  # New High (Max Green)
-    elif pct <= -15: return "F8696B"  # Deep Correction (Max Red)
+        
+    if pct >= 0: return "63BE7B"       # New High (Max Green)
+    elif pct <= -15: return "F8696B"   # Deep Correction (Max Red)
     elif pct > -5:
         # Fades from Green (0%) to White (-5%)
         ratio = abs(pct) / 5.0
@@ -35,7 +35,7 @@ def get_drawdown_color(pct):
 
 # 1. Define the upgraded layout with Benchmark Columns at the end
 headers = [
-    "Date", "Up 4% Today", "Down 4% Today", "5 Day Ratio", "10 Day Ratio",
+    "Date", "Up 4% Today", "Down 4% Today", "5 Day Ratio", "10 Day Ratio", 
     "Advances", "Declines", "A/D Ratio", "52W Highs", "52W Lows", "Volume Breadth",
     "> 200 SMA (%)", "> 50 SMA (%)", "> 20 EMA (%)", "> 10 EMA (%)",
     "Nifty 500 Close", "Nifty 500 Chg %"
@@ -46,16 +46,19 @@ print("Fetching Nifty 500 Benchmark data...")
 n500_dict = {}
 try:
     nifty500_raw = yf.download('^CRSLDX', period="2y")
+    
     # Force flatten the dataframe if yfinance returns a MultiIndex
     if isinstance(nifty500_raw.columns, pd.MultiIndex):
         nifty500_raw.columns = nifty500_raw.columns.droplevel(1)
-    nifty500_raw = nifty500_raw.loc[:,~nifty500_raw.columns.duplicated()]
+        nifty500_raw = nifty500_raw.loc[:,~nifty500_raw.columns.duplicated()]
+        
     nifty500_raw['Change'] = nifty500_raw['Close'].pct_change() * 100
     nifty500_raw['52W_High'] = nifty500_raw['High'].rolling(window=252).max()
     nifty500_raw['Pct_Off_High'] = ((nifty500_raw['Close'] - nifty500_raw['52W_High']) / nifty500_raw['52W_High']) * 100
     
     for ts, r in nifty500_raw.iterrows():
         d_str = ts.strftime("%Y-%m-%d")
+        
         try:
             c_val = float(r['Close'])
             chg_val = float(r['Change'])
@@ -102,9 +105,8 @@ rolling_high_252 = high_df.rolling(window=252).max()
 rolling_low_252 = low_df.rolling(window=252).min()
 
 history_data = []
-lookback_days = 65
-if len(close_df) < lookback_days: 
-    lookback_days = len(close_df) - 1
+lookback_days = 65 
+if len(close_df) < lookback_days: lookback_days = len(close_df) - 1
 
 for i in range(-lookback_days, 0):
     date_str = close_df.index[i].strftime("%Y-%m-%d")
@@ -128,12 +130,12 @@ for i in range(-lookback_days, 0):
     if down_vol > 0:
         vol_breadth = round((up_vol / down_vol), 2)
     elif up_vol > 0:
-        vol_breadth = 99.99
+        vol_breadth = 99.99 
     else:
         vol_breadth = 0.0
-        
+    
     sma_200 = sma_200_df.iloc[i]
-    valid_200 = sma_200.notna().sum()
+    valid_200 = sma_200.notna().sum() 
     pct_200 = round(((day_close > sma_200).sum() / valid_200) * 100, 2) if valid_200 > 0 else 0.0
 
     sma_50 = sma_50_df.iloc[i]
@@ -150,8 +152,8 @@ for i in range(-lookback_days, 0):
     
     history_data.append({
         "Date": date_str, "Nifty 500 Close": "", "Nifty 500 Chg %": "", "Hidden_Pct_Off": "",
-        "Up 4% Today": up_4, "Down 4% Today": down_4,
-        "Advances": advances, "Declines": declines, "A/D Ratio": ad_ratio,
+        "Up 4% Today": up_4, "Down 4% Today": down_4, 
+        "Advances": advances, "Declines": declines, "A/D Ratio": ad_ratio, 
         "52W Highs": new_highs, "52W Lows": new_lows, "Volume Breadth": vol_breadth,
         "> 200 SMA (%)": pct_200, "> 50 SMA (%)": pct_50, "> 20 EMA (%)": pct_20, "> 10 EMA (%)": pct_10
     })
@@ -168,11 +170,13 @@ if os.path.exists(file_name):
         df_archive = pd.read_excel(file_name)
         df_combined = pd.concat([df_recent, df_archive], ignore_index=True)
         df_combined = df_combined.drop_duplicates(subset=['Date'], keep='first')
+        
         for col in headers:
             if col not in df_combined.columns:
-                df_combined[col] = ""
+                df_combined[col] = "" 
         if 'Hidden_Pct_Off' not in df_combined.columns:
             df_combined['Hidden_Pct_Off'] = ""
+            
     except Exception as e:
         print(f"Archive read error: {e}")
         df_combined = df_recent.copy()
@@ -188,7 +192,7 @@ for idx, row in df_combined.iterrows():
         df_combined.at[idx, 'Hidden_Pct_Off'] = n500_dict[d_str]['Pct_Off']
 
 df_final = df_combined.sort_values(by="Date", ascending=False)
-df_final = df_final.fillna("")
+df_final = df_final.fillna("") 
 
 # 6. Rebuild Excel File (Columns properly ordered)
 if os.path.exists(file_name):
@@ -203,19 +207,20 @@ ws.append(headers)
 for index, row in df_final.iterrows():
     date_val = str(row['Date'])[:10] if str(row['Date']) != "" else ""
     pct_off = row.get('Hidden_Pct_Off', "")
+    
     ws.append([
-        date_val,
+        date_val, 
         row['Up 4% Today'], row['Down 4% Today'], row['5 Day Ratio'], row['10 Day Ratio'],
-        row['Advances'], row['Declines'], row['A/D Ratio'],
+        row['Advances'], row['Declines'], row['A/D Ratio'], 
         row['52W Highs'], row['52W Lows'], row['Volume Breadth'],
         row['> 200 SMA (%)'], row['> 50 SMA (%)'], row['> 20 EMA (%)'], row['> 10 EMA (%)'],
         row['Nifty 500 Close'], row['Nifty 500 Chg %']
     ])
     
-# 7A. Apply Custom Python Paint directly to the Nifty 500 Price (Now moved to Column P)
-current_row = ws.max_row
-color_hex = get_drawdown_color(pct_off)
-ws[f"P{current_row}"].fill = PatternFill(start_color=color_hex, end_color=color_hex, fill_type="solid")
+    # 7A. Apply Custom Python Paint directly to the Nifty 500 Price (Now moved to Column P)
+    current_row = ws.max_row
+    color_hex = get_drawdown_color(pct_off)
+    ws[f"P{current_row}"].fill = PatternFill(start_color=color_hex, end_color=color_hex, fill_type="solid")
 
 # 7B. Apply Fixed Quantitative Conditional Formatting to shifted columns
 max_row = ws.max_row
@@ -229,16 +234,16 @@ breadth_red = ColorScaleRule(start_type='num', start_value=0, start_color='FFFFF
 ratio_scale = ColorScaleRule(start_type='num', start_value=0.5, start_color='F8696B', mid_type='num', mid_value=1.0, mid_color='FFFFFF', end_type='num', end_value=2.0, end_color='63BE7B')
 ma_scale = ColorScaleRule(start_type='num', start_value=0, start_color='F8696B', mid_type='num', mid_value=50, mid_color='FFFFFF', end_type='num', end_value=100, end_color='63BE7B')
 
-ws.conditional_formatting.add(f"B2:B{max_row}", thrust_green) # Up 4%
-ws.conditional_formatting.add(f"C2:C{max_row}", thrust_red) # Down 4%
-ws.conditional_formatting.add(f"D2:E{max_row}", ratio_scale) # 5 & 10 Day Ratios
-ws.conditional_formatting.add(f"F2:F{max_row}", breadth_green) # Advances
-ws.conditional_formatting.add(f"G2:G{max_row}", breadth_red) # Declines
-ws.conditional_formatting.add(f"H2:H{max_row}", ratio_scale) # A/D Ratio
-ws.conditional_formatting.add(f"I2:I{max_row}", thrust_green) # 52W Highs
-ws.conditional_formatting.add(f"J2:J{max_row}", thrust_red) # 52W Lows
-ws.conditional_formatting.add(f"K2:K{max_row}", ratio_scale) # Volume Breadth
-ws.conditional_formatting.add(f"L2:O{max_row}", ma_scale) # Moving Averages
+ws.conditional_formatting.add(f"B2:B{max_row}", thrust_green)  # Up 4% 
+ws.conditional_formatting.add(f"C2:C{max_row}", thrust_red)    # Down 4% 
+ws.conditional_formatting.add(f"D2:E{max_row}", ratio_scale)   # 5 & 10 Day Ratios 
+ws.conditional_formatting.add(f"F2:F{max_row}", breadth_green) # Advances 
+ws.conditional_formatting.add(f"G2:G{max_row}", breadth_red)   # Declines 
+ws.conditional_formatting.add(f"H2:H{max_row}", ratio_scale)   # A/D Ratio 
+ws.conditional_formatting.add(f"I2:I{max_row}", thrust_green)  # 52W Highs 
+ws.conditional_formatting.add(f"J2:J{max_row}", thrust_red)    # 52W Lows
+ws.conditional_formatting.add(f"K2:K{max_row}", ratio_scale)   # Volume Breadth 
+ws.conditional_formatting.add(f"L2:O{max_row}", ma_scale)      # Moving Averages 
 ws.conditional_formatting.add(f"Q2:Q{max_row}", n500_chg_scale)# Nifty 500 Chg % (-2% to 2%)
 
 # 8. Formatting: Auto-fit & Center Alignment
@@ -246,15 +251,15 @@ center_aligned_text = Alignment(horizontal="center", vertical="center")
 
 for col in ws.columns:
     max_length = 0
-    column = col[0].column_letter
+    column = col[0].column_letter 
     for cell in col:
         cell.alignment = center_aligned_text # Apply center alignment to every cell
-        try:
+        try: 
             if len(str(cell.value)) > max_length:
                 max_length = len(str(cell.value))
         except:
             pass
-    adjusted_width = (max_length + 2)
+    adjusted_width = (max_length + 2) 
     ws.column_dimensions[column].width = adjusted_width
 
 wb.save(file_name)
