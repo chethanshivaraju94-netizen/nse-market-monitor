@@ -28,7 +28,7 @@ tickers = {
     "MNC": "^CNXMNC",
     "Media": "^CNXMEDIA",
     "PSU Bank": "^CNXPSUBANK",
-    "Healthcare": "HEALTHY.NS",       # Aditya BSL Nifty Healthcare ETF
+    "Healthcare": "NIFTY_HEALTHCARE.NS", # Updated to the exact native index
     "Defence": "MODEFENCE.NS"
 }
 
