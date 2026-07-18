@@ -20,7 +20,7 @@ tickers = {
     "Metal": "^CNXMETAL",
     "Energy": "^CNXENERGY",
     "Realty": "^CNXREALTY",
-    "Fin Services": "^CNXFIN",
+    "Fin Services": "NIFTY_FIN_SERVICE.NS",
     "Infrastructure": "^CNXINFRA",
     "Consumption": "^CNXCONSUM",
     "Commodities": "^CNXCMDT",
