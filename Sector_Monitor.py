@@ -14,20 +14,24 @@ benchmark_ticker = "^CRSLDX" # Nifty 500
 tickers = {
     "IT": "ITBEES.NS",               
     "Bank": "BANKBEES.NS",           
+    "Private Bank": "HDFCPVTBAN.NS", 
+    "PSU Bank": "PSUBNKBEES.NS",     
     "Auto": "AUTOBEES.NS",           
     "FMCG": "FMCGIETF.NS",           
     "Pharma": "PHARMABEES.NS",       
+    "Healthcare": "HEALTHY.NS",      
     "Metal": "METALIETF.NS",         
     "Realty": "MOREALTY.NS",         
     "Fin Services": "FINIETF.NS",    
     "Infrastructure": "INFRAIETF.NS",
     "Consumption": "CONSUMBEES.NS",  
     "PSE": "ABSLPSE.NS",             
-    "PSU Bank": "PSUBNKBEES.NS",     
-    "Healthcare": "HEALTHY.NS",      
     "Defence": "MODEFENCE.NS",       
     "Energy": "MOENERGY.NS",         
+    "Oil & Gas": "OILIETF.NS",       
     "Commodities": "COMMOIETF.NS",   
+    "Chemicals": "CHEMICAL.NS",      
+    "Manufacturing": "MAKEINDIA.NS", 
     "MNC": "MNC.NS"                  
 }
 
