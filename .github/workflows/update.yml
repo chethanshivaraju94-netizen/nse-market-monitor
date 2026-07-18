@@ -22,7 +22,8 @@ jobs:
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pandas openpyxl git+https://github.com/rongardF/tvdatafeed.git
+        # Keeping yfinance active for MM.py while adding tvdatafeed for Sector_Monitor.py
+        pip install pandas openpyxl yfinance git+https://github.com/rongardF/tvdatafeed.git
 
     - name: Run Market Monitor Script
       run: python MM.py
