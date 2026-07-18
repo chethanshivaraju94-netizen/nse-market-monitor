@@ -74,41 +74,46 @@ try:
 except Exception as e:
     print(f"Warning: Could not fetch Nifty 500 data: {e}")
 
-# 3. Fetch the Nifty Total Market universe list dynamically via NSE Handshake
-print("Fetching Nifty Total Market universe list via NSE Session Handshake...")
-try:
-    import requests
-    import io
-    
-    headers_dict = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-        "Connection": "keep-alive"
-    }
-    
-    # Start a persistent session to hold cookies
-    session = requests.Session()
-    session.headers.update(headers_dict)
-    
-    # Hit the main NSE page to grab the required security cookies
-    session.get("https://www.nseindia.com", timeout=15)
-    
-    # Request the CSV using the authenticated session
-    csv_url = "https://archives.nseindia.com/content/indices/ind_niftytotalmarket_list.csv"
-    response = session.get(csv_url, timeout=15)
-    
-    if response.status_code == 200:
-        # Read the raw text response into pandas using io.StringIO
-        nifty_total_df = pd.read_csv(io.StringIO(response.text))
-        tickers = [str(symbol) + ".NS" for symbol in nifty_total_df['Symbol']]
-        print(f"Successfully loaded {len(tickers)} tickers from live NSE data.")
-    else:
-        raise Exception(f"NSE returned status code {response.status_code}")
+# 3. Fetch the Nifty Total Market universe list dynamically
+print("Fetching Nifty Total Market universe list...")
+tickers = []
 
-except Exception as e:
-    print(f"Error fetching live list: {e}. Falling back to standard list.")
+# Method 1: NiftyIndices Alternative Official Source
+try:
+    print("Attempt 1: NiftyIndices...")
+    url = "https://niftyindices.com/IndexConstituent/ind_niftytotalmarket_list.csv"
+    nifty_total_df = pd.read_csv(url, storage_options={'User-Agent': 'Mozilla/5.0'})
+    tickers = [str(symbol) + ".NS" for symbol in nifty_total_df['Symbol']]
+except Exception as e1:
+    print(f"Attempt 1 failed: {e1}")
+    
+# Method 2: NSE Archives via Open Proxy
+if len(tickers) < 100:
+    try:
+        print("Attempt 2: NSE Archives via Proxy...")
+        nse_url = "https://archives.nseindia.com/content/indices/ind_niftytotalmarket_list.csv"
+        proxy_url = f"https://api.allorigins.win/raw?url={nse_url}"
+        nifty_total_df = pd.read_csv(proxy_url, storage_options={'User-Agent': 'Mozilla/5.0'})
+        tickers = [str(symbol) + ".NS" for symbol in nifty_total_df['Symbol']]
+    except Exception as e2:
+        print(f"Attempt 2 failed: {e2}")
+
+# Method 3: Auto-updating Community GitHub Mirror 
+if len(tickers) < 100:
+    try:
+        print("Attempt 3: Zero-maintenance Community Mirror...")
+        url = "https://raw.githubusercontent.com/anirudh2290/nse-ticker-symbols/master/all_tickers.csv"
+        df = pd.read_csv(url)
+        sym_col = [c for c in df.columns if 'symbol' in c.lower()][0]
+        tickers = [str(s) + ".NS" for s in df[sym_col]]
+    except Exception as e3:
+        print(f"Attempt 3 failed: {e3}")
+
+if len(tickers) < 100:
+    print("Warning: All dynamic fetches failed. Falling back to standard list.")
     tickers = ["RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS"]
+else:
+    print(f"Successfully loaded {len(tickers)} components.")
 
 # 4. Download full OHLCV data for Breadth Metrics
 print("Downloading breadth data from Yahoo Finance (this may take 1-2 minutes)...")
