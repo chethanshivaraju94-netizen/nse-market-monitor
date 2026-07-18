@@ -22,7 +22,6 @@ jobs:
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
-        # yfinance has been successfully eliminated from the stack!
         pip install pandas openpyxl git+https://github.com/rongardF/tvdatafeed.git
 
     - name: Run Market Monitor Script
