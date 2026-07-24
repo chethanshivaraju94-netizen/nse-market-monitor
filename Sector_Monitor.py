@@ -37,7 +37,7 @@ tickers = {
     "Chemicals": "CHEMICAL.NS",      
     "Manufacturing": "MAKEINDIA.NS",
     "Capital Market": "MOCAPITAL.NS",
-    "Digital": "TNIDETF.NS",          
+    "Digital": "TNIDETF.NS",         
     "Internet": "INTERNET.NS",        
     "Tourism": "MOTOUR.NS",           
     "Services": "MOSERVICE.NS",       
@@ -169,18 +169,23 @@ for sector_name, symbol in tickers.items():
     rs_252_max = rs_line.rolling(252).max().iloc[-1]
     pct_off_rs_high = ((rs_line.iloc[-1] - rs_252_max) / rs_252_max) * 100 if rs_252_max > 0 else 0.0
     
-    # Rank Delta
+    # Rank Velocity (Momentum Acceleration)
     current_rank = historical_ranks[sector_name].iloc[-1]
-    past_rank_1w = historical_ranks[sector_name].iloc[-6] # 5 trading days ago
+    past_rank_5d = historical_ranks[sector_name].iloc[-6] if len(historical_ranks) >= 6 else np.nan
+    past_rank_10d = historical_ranks[sector_name].iloc[-11] if len(historical_ranks) >= 11 else np.nan
+    past_rank_20d = historical_ranks[sector_name].iloc[-21] if len(historical_ranks) >= 21 else np.nan
+    past_rank_65d = historical_ranks[sector_name].iloc[-66] if len(historical_ranks) >= 66 else np.nan
     
-    rank_delta = 0
-    if pd.notna(current_rank) and pd.notna(past_rank_1w):
-        rank_delta = int(past_rank_1w) - int(current_rank)
+    def calc_vel(past, curr):
+        return int(past) - int(curr) if pd.notna(past) and pd.notna(curr) else 0
 
     metrics.append({
         "Sector": sector_name,
         "65D RS Rank": current_rank,
-        "1-Week Rank Delta": f"+{rank_delta}" if rank_delta > 0 else str(rank_delta),
+        "5D Rank Velocity": calc_vel(past_rank_5d, current_rank),
+        "10D Rank Velocity": calc_vel(past_rank_10d, current_rank),
+        "20D Rank Velocity": calc_vel(past_rank_20d, current_rank),
+        "65D Rank Velocity": calc_vel(past_rank_65d, current_rank),
         "Close": round(sec_close.iloc[-1], 2),
         "% Chg": round(chg_1d, 2),
         "5D RS %": round(rs_5d, 2),
@@ -231,19 +236,28 @@ for col in ws1.columns:
     ws1.column_dimensions[col_let].width = max(max_len + 4, 12) # Padding for clear visual spacing
     for cell in col: cell.alignment = center_align
 
-# Conditional formatting for Time-Frame Matrices (Columns F, G, H - 5D, 21D, 65D RS)
+# Conditional formatting for Rank Velocity (Columns C, D, E, F)
+velocity_scale = ColorScaleRule(start_type='num', start_value=-10, start_color='F8696B', mid_type='num', mid_value=0, mid_color='FFFFFF', end_type='num', end_value=10, end_color='63BE7B')
+ws1.conditional_formatting.add(f"C2:F{ws1.max_row}", velocity_scale)
+
+# Apply explicit plus/minus number formatting to the velocity columns so "+5" renders cleanly
+for row in ws1.iter_rows(min_row=2, max_row=ws1.max_row, min_col=3, max_col=6):
+    for cell in row:
+        cell.number_format = '+0;-0;0'
+
+# Conditional formatting for Time-Frame Matrices (Columns I, J, K - 5D, 21D, 65D RS)
 rs_scale = ColorScaleRule(start_type='num', start_value=-10, start_color='F8696B', mid_type='num', mid_value=0, mid_color='FFFFFF', end_type='num', end_value=10, end_color='63BE7B')
-ws1.conditional_formatting.add(f"F2:H{ws1.max_row}", rs_scale)
+ws1.conditional_formatting.add(f"I2:K{ws1.max_row}", rs_scale)
 
 # Conditional Formatting for Binary Indicators
-ws1.conditional_formatting.add(f"I2:I{ws1.max_row}", CellIsRule(operator='equal', formula=['"Up"'], fill=green_fill))
-ws1.conditional_formatting.add(f"I2:I{ws1.max_row}", CellIsRule(operator='equal', formula=['"Down"'], fill=red_fill))
+ws1.conditional_formatting.add(f"L2:L{ws1.max_row}", CellIsRule(operator='equal', formula=['"Up"'], fill=green_fill))
+ws1.conditional_formatting.add(f"L2:L{ws1.max_row}", CellIsRule(operator='equal', formula=['"Down"'], fill=red_fill))
 
-# Continuous Formatting for % Off RS High (Column J)
+# Continuous Formatting for % Off RS High (Column M)
 pct_off_scale = ColorScaleRule(start_type='num', start_value=-15.0, start_color='F8696B', mid_type='num', mid_value=-5.0, mid_color='FFFFFF', end_type='num', end_value=0.0, end_color='63BE7B')
-ws1.conditional_formatting.add(f"J2:J{ws1.max_row}", pct_off_scale)
+ws1.conditional_formatting.add(f"M2:M{ws1.max_row}", pct_off_scale)
 
-for col_let in ['K', 'L', 'M', 'N']: # Moving Averages
+for col_let in ['N', 'O', 'P', 'Q']: # Moving Averages
     ws1.conditional_formatting.add(f"{col_let}2:{col_let}{ws1.max_row}", CellIsRule(operator='equal', formula=['"Yes"'], fill=green_fill))
     ws1.conditional_formatting.add(f"{col_let}2:{col_let}{ws1.max_row}", CellIsRule(operator='equal', formula=['"No"'], fill=red_fill))
 
