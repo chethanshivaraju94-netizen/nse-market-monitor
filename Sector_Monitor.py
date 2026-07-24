@@ -216,7 +216,8 @@ for r in df_heatmap.itertuples(index=False):
 
 # Tab 2: Historical Ranks Tracker
 ws2 = wb.create_sheet(title="Rotation Tracker")
-hist_tracker = historical_ranks.dropna(how='all').tail(65).sort_index(ascending=False)
+# --- FIXED: Changed .tail(65) to .tail(66) to properly display the 65D lookback date ---
+hist_tracker = historical_ranks.dropna(how='all').tail(66).sort_index(ascending=False)
 headers_t2 = ["Date"] + list(hist_tracker.columns)
 ws2.append(headers_t2)
 
