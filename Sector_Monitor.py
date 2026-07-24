@@ -173,7 +173,7 @@ for sector_name, symbol in tickers.items():
     current_rank = historical_ranks[sector_name].iloc[-1]
     past_rank_5d = historical_ranks[sector_name].iloc[-6] if len(historical_ranks) >= 6 else np.nan
     past_rank_10d = historical_ranks[sector_name].iloc[-11] if len(historical_ranks) >= 11 else np.nan
-    past_rank_20d = historical_ranks[sector_name].iloc[-21] if len(historical_ranks) >= 21 else np.nan
+    past_rank_21d = historical_ranks[sector_name].iloc[-22] if len(historical_ranks) >= 22 else np.nan
     past_rank_65d = historical_ranks[sector_name].iloc[-66] if len(historical_ranks) >= 66 else np.nan
     
     def calc_vel(past, curr):
@@ -184,7 +184,7 @@ for sector_name, symbol in tickers.items():
         "65D RS Rank": current_rank,
         "5D Rank Velocity": calc_vel(past_rank_5d, current_rank),
         "10D Rank Velocity": calc_vel(past_rank_10d, current_rank),
-        "20D Rank Velocity": calc_vel(past_rank_20d, current_rank),
+        "21D Rank Velocity": calc_vel(past_rank_21d, current_rank),
         "65D Rank Velocity": calc_vel(past_rank_65d, current_rank),
         "Close": round(sec_close.iloc[-1], 2),
         "% Chg": round(chg_1d, 2),
@@ -216,7 +216,6 @@ for r in df_heatmap.itertuples(index=False):
 
 # Tab 2: Historical Ranks Tracker
 ws2 = wb.create_sheet(title="Rotation Tracker")
-# --- FIXED: Changed .tail(65) to .tail(66) to properly display the 65D lookback date ---
 hist_tracker = historical_ranks.dropna(how='all').tail(66).sort_index(ascending=False)
 headers_t2 = ["Date"] + list(hist_tracker.columns)
 ws2.append(headers_t2)
