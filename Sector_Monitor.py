@@ -34,7 +34,7 @@ tickers = {
     # Thematic & Niche
     "Defence": "MODEFENCE.NS",       
     "Oil & Gas": "OILIETF.NS",       
-    "Chemicals": "CHEMICAL.NS",      
+    "Chemicals": "GROWWCHEM.NS",      
     "Manufacturing": "MAKEINDIA.NS",
     "Capital Market": "MOCAPITAL.NS",
     "Digital": "TNIDETF.NS",         
